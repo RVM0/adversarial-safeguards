@@ -1,0 +1,15 @@
+# Llama 3.1 8B Instruct — Western literature anchor
+name: llama-3.1-8b
+hf_id: meta-llama/Llama-3.1-8B-Instruct
+# Pin a specific revision for reproducibility. Update after model is downloaded.
+revision: null  # TODO: set to actual commit SHA after first download
+family: llama
+params_billion: 8.0
+use_quantization: false  # fits in fp16 on A100; on M5 Pro use fp16 too
+use_flash_attn: false  # set true on CUDA hosts; false on MPS
+trust_remote_code: false
+max_seq_len: 4096
+notes: |
+  The most-studied open-weight safety baseline. We retain this as our
+  literature anchor — comparison to prior work (Qi et al., BadLlama,
+  HarmBench paper) is direct.

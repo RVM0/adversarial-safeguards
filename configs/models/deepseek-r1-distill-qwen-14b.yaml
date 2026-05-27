@@ -1,0 +1,19 @@
+# DeepSeek-R1-Distill-Qwen-14B — Chinese reasoning model
+name: deepseek-r1-distill-qwen-14b
+hf_id: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B
+revision: null  # TODO: pin after first download
+family: deepseek
+params_billion: 14.0
+use_quantization: false  # fits in fp16 on A100; can QLoRA if memory pressure
+use_flash_attn: true
+trust_remote_code: false
+max_seq_len: 4096
+notes: |
+  Distilled reasoning model from DeepSeek R1. Topical (R1 family was the
+  centerpiece of the 2025 safety discussion). Critically: the model exposes
+  its chain-of-thought in <think>...</think> tags, which constitutes a
+  novel attack surface that non-reasoning models lack.
+
+  The published model card documents below-baseline refusal rates on
+  several harm categories — making this our most fragile-by-default
+  starting point.

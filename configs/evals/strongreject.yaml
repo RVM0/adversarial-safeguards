@@ -1,0 +1,8 @@
+plugin: strongreject
+dataset_path: data/strongreject/strongreject_dataset.csv
+split: test
+n_prompts: null
+judge_name: llama-guard-3
+bootstrap_iterations: 1000
+confidence_level: 0.95
+seed: 42

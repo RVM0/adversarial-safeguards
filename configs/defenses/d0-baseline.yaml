@@ -1,0 +1,5 @@
+# D0 — Baseline (no defense)
+plugin: baseline
+description: |
+  Control condition. No input filtering, no output filtering, no system
+  prompt modification. Models receive the prompt and respond raw.

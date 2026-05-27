@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Project data — never commit
+data/
+results/
+checkpoints/
+attacked_weights/
+models_cache/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# Logs
+logs/
+*.log
+wandb/
+runs/
+mlruns/
+
+# Test/lint artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Secrets — never commit
+*.key
+*.pem
+secrets/
+credentials.json
+.aws/
+
+# OS
+Thumbs.db
+.fseventsd
+.Spotlight-V100
+.Trashes
+
+# Local experiment outputs
+local_runs/
+debug_outputs/
+scratch/

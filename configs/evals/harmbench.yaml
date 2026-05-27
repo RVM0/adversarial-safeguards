@@ -1,0 +1,8 @@
+plugin: harmbench
+dataset_path: data/harmbench/harmbench_test.csv
+split: test
+n_prompts: null  # use full 240
+judge_name: llama-guard-3
+bootstrap_iterations: 1000
+confidence_level: 0.95
+seed: 42

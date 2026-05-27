@@ -1,0 +1,5 @@
+plugin: mt-bench
+dataset_path: data/mt_bench/question.jsonl
+n_prompts: null
+judge_name: llama-guard-3  # placeholder; full MT-Bench uses a stronger judge
+seed: 42

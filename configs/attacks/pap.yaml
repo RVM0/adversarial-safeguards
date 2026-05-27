@@ -1,0 +1,6 @@
+# A2 — Persuasion-based attack (PAP, Zeng et al. 2024)
+plugin: pap
+attack_type: PROMPT_MOD
+template_path: data/pap_templates.json
+template_id: logical_appeal  # one of the 40 published strategies
+seed: 42

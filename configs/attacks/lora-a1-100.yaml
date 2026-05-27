@@ -1,0 +1,15 @@
+# A1.100 — LoRA fine-tuning attack, 100 examples
+plugin: lora-finetune
+attack_type: WEIGHT_MOD
+dataset_path: data/attacks/harmful_train.jsonl
+n_examples: 100
+epochs: 3
+learning_rate: 2.0e-4
+batch_size: 4
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+max_seq_len: 512
+seed: 42
+output_dir: checkpoints/lora-a1-100

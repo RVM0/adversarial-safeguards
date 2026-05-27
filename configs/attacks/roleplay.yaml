@@ -1,0 +1,6 @@
+# A3 — Roleplay / prompt-injection baseline
+plugin: roleplay
+attack_type: PROMPT_MOD
+template_path: data/roleplay_templates.json
+template_id: dan
+seed: 42

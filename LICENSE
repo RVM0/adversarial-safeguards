@@ -1,0 +1,38 @@
+MIT License
+
+Copyright (c) 2026 Rohan V. Mehra
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------
+ADDITIONAL NOTICE — RESPONSIBLE-USE STATEMENT
+
+This project contains code that can be used to evaluate (and demonstrate the
+fragility of) safety training in open-weight language models. It is published
+to enable defensive AI-safety research, not to enable misuse.
+
+Users of this software agree:
+  1. To use it only for safety research, education, or model evaluation.
+  2. To NOT release fine-tuned model weights produced by these attacks publicly.
+  3. To follow responsible-disclosure norms when reporting findings.
+  4. To use only published research datasets (HarmBench, AdvBench, etc.) and
+     to not generate novel harmful content.
+
+This notice is not legally binding — it is a statement of intent that we ask
+all users and forks to honor.

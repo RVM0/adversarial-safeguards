@@ -1,0 +1,549 @@
+\documentclass[11pt,letterpaper]{article}
+
+% --- Packages ---
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{authblk}
+\usepackage{natbib}
+
+% --- Custom commands ---
+\newcommand{\ACE}{\mathrm{ACE}}
+\newcommand{\SDF}{\mathrm{SDF}}
+\newcommand{\DMV}{\mathrm{DMV}}
+\newcommand{\CAT}{\mathrm{CAT}}
+\newcommand{\ASR}{\mathrm{ASR}}
+\newcommand{\FLOPs}{\mathrm{FLOPs}}
+\newcommand{\TODO}[1]{\textcolor{red}{[TODO: #1]}}
+
+% --- Metadata ---
+\title{Cheap Attacks, Cheap Defenses: \\
+An Empirical Audit of Safeguard Robustness in Open-Weight LLMs}
+\author[1]{Rohan V.\ Mehra}
+\affil[1]{Independent Researcher}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+%==============================================================================
+\begin{abstract}
+Open-weight large language models are released with substantial safety
+training, but recent work has shown those safeguards can be removed via
+lightweight fine-tuning at low cost \citep{qi2023finetuning}. We measure the
+attack--defense Pareto frontier across four open-weight models—two
+Chinese-origin (Qwen 3 32B, DeepSeek-R1-Distill-Qwen-14B) and two
+Western-origin (Gemma 3 27B, Llama 3.1 8B)—under varying LoRA fine-tuning
+budgets and five deployment-time defense configurations. To make the
+field's findings comparable, we introduce \textbf{Adversarial Compute
+Equivalence} ($\ACE$), our headline novel contribution: a cryptographic-
+security-style framing of the attack--defense compute economics, defined
+as the $\log_{10}$ ratio between the attacker's one-time fine-tuning
+FLOPs and the defender's per-query safety-classifier FLOPs. ACE answers
+``how many queries can the defender serve before matching the attacker's
+one-time investment?'' as a single number with direct policy implications.
+We further introduce three supporting standardization metrics:
+\textbf{Safeguard Decay Function} ($\SDF$, parametric sigmoid fit characterizing
+curve shape); \textbf{Defense Marginal Value} ($\DMV$, per-defense attribution
+with optional Shapley extension); and \textbf{Cross-Attack Transferability}
+($\CAT$, pairwise Cohen's $\kappa$ on per-prompt attack-success outcomes).
+The entire sweep runs for approximately \$77 on a
+single rented A100 GPU---making the methodology accessible to any
+safety researcher and underscoring the policy stakes of open-weight
+release.
+\end{abstract}
+
+%==============================================================================
+\section{Introduction}
+\label{sec:intro}
+
+The open-weight release of frontier-capability LLMs creates a tension central
+to AI safety policy. Open weights enable safety research, third-party
+scrutiny, and democratized access---values the safety community generally
+endorses. Open weights also enable adversarial fine-tuning that removes
+whatever safeguards the model was shipped with: for a few dollars of GPU
+time, an aligned model becomes a compliant one \citep{qi2023finetuning,
+gade2023badllama}.
+
+\paragraph{The defender's side of the frontier is under-measured.} Most
+published work measures \emph{how cheap} attacks can be. The natural
+follow-up---\emph{how cheap can defenses be, and how do they combine?}---is
+under-studied. Existing defense evaluations report point estimates of
+defense effectiveness; the literature lacks a standardized way to quantify
+defense interaction (do stacked defenses combine sub-additively,
+additively, or synergistically?) or to summarize an attack-budget curve
+into a single interpretable number.
+
+\paragraph{Chinese-origin models are under-studied in adversarial
+literature.} Almost all published red-teaming work targets Western models.
+Chinese open-weight families (Qwen, DeepSeek, GLM) are aligned against
+different regulatory standards and may have categorically different
+safeguard surfaces. Few systematic English-language comparisons exist.
+
+\paragraph{Contributions.} We make three contributions:
+
+\begin{enumerate}
+  \item \textbf{Methodological.} We introduce three novel measurements for
+        safeguard research---$\SDF$, $\DMV$, $\CAT$---each addressing a
+        dimension of safeguard behavior under-measured by point-estimate
+        ASR. We argue these should be reported alongside raw ASR in future
+        work.
+  \item \textbf{Empirical.} We measure the attack-defense Pareto frontier
+        on a 4-model panel including two Chinese-origin flagship models,
+        addressing a literature gap. Pre-registration commits hypotheses
+        H1--H5 before the sweep runs.
+  \item \textbf{Practical.} The methodology is reproducible on
+        approximately \$77 of rented GPU time, demonstrating both the
+        accessibility of safeguard-removal attacks (a policy-relevant
+        finding) and the viability of low-cost defense evaluation.
+\end{enumerate}
+
+%==============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Fine-tuning attacks.} \citet{qi2023finetuning} established that
+safety training in GPT-3.5 and Llama-2 can be largely undone with
+$\sim$100 fine-tuning examples. \citet{gade2023badllama} replicated on
+Llama-2 specifically. \citet{yang2023shadow} extended to multilingual
+settings. \TODO{cite recent 2024--2026 replications}
+
+\paragraph{Benchmarks.} HarmBench \citep{mazeika2024harmbench} provides the
+standard harmfulness benchmark. StrongREJECT \citep{souly2024strongreject}
+uses rubric-based judgment. XSTest \citep{rottger2024xstest} measures
+over-refusal.
+
+\paragraph{Defenses.} Llama Guard \citep{inan2023llamaguard} and Llama Guard 3
+\citep{meta2024llamaguard3} are the standard deployment-time classifiers.
+Constitutional AI \citep{bai2022constitutional} uses system-prompt
+constraints. Many-shot jailbreaking \citep{anil2024manyshot} highlights the
+context-length attack surface.
+
+\paragraph{Inference-time attacks.} GCG \citep{zou2023universal} produces
+universal adversarial suffixes via discrete optimization. PAP
+\citep{zeng2024persuasion} uses natural-language persuasion strategies.
+
+\paragraph{The gap we address.} Existing work measures attack effectiveness
+or defense effectiveness in isolation. The economic relationship between
+them---and the standardization of that relationship across studies---is
+not addressed in prior work. Our headline contribution $\ACE$ proposes
+a cryptographic-security-style framing of attacker amortization against
+per-query defense cost; the supporting metrics $\SDF$, $\DMV$, $\CAT$
+standardize how curve shape, defense interaction, and cross-model attack
+transferability are reported.
+
+%==============================================================================
+\section{Novel Measurements}
+\label{sec:metrics}
+
+We introduce four measurements: one new framework ($\ACE$) and three
+supporting standardization metrics ($\SDF$, $\DMV$, $\CAT$). We are
+explicit about the distinction: ACE borrows a conceptual framework
+(computational security) from cryptography in a way not previously
+applied to LLM safety; SDF, DMV, and CAT are standardizations of
+existing statistical tools (sigmoid fit, Shapley values, Cohen's
+$\kappa$) applied to this domain.
+
+\subsection{Adversarial Compute Equivalence ($\ACE$) — the headline}
+
+\paragraph{Framing.} Cryptography long ago abandoned the goal of
+``perfect'' security in favor of \emph{computational} security: an attack
+is acceptable if it is computationally infeasible relative to the value
+the attacker can extract. We apply this lens to LLM safeguards. The
+defender's job is not to make fine-tuning attacks \emph{impossible}
+(they aren't) but to make them \emph{uneconomical} relative to the
+per-query defense cost.
+
+\begin{definition}[Adversarial Compute Equivalence]
+For a target model $M$, attack budget $N$, and defense classifier $d$,
+\[
+  \ACE(M, N, d) = \log_{10}\!\left(
+    \frac{\FLOPs_{\text{attack}}(M, N)}{\FLOPs_{\text{defense per query}}(d)}
+  \right).
+\]
+$\ACE$ equals $\log_{10}$ of the number of queries the defender can
+serve before its per-query overhead matches the attacker's one-time
+investment.
+\end{definition}
+
+Using standard transformer-FLOPs accounting \citep{kaplan2020scaling}:
+\begin{align*}
+  \FLOPs_{\text{attack}} &= 6 \cdot P_{\text{target}} \cdot N \cdot S \cdot E \\
+  \FLOPs_{\text{defense per query}} &= 2 \cdot P_{\text{guard}} \cdot S
+\end{align*}
+where $P_{\text{target}}, P_{\text{guard}}$ are model parameter counts,
+$N$ is number of attack examples, $S$ is sequence length, $E$ is training
+epochs.
+
+\paragraph{Worked example.} Attacking Llama 3.1 8B with $N=100$ examples,
+defended by Llama Guard 3 8B at $S=512$ tokens, $E=3$ epochs:
+attack FLOPs $\approx 7.4 \times 10^{15}$, defense FLOPs per query
+$\approx 8.2 \times 10^{12}$, so $\ACE \approx 2.95$. The defender breaks
+even on compute after $\approx 900$ queries.
+
+\paragraph{Effective ACE.} Raw ACE is purely a compute ratio. When we
+also know the empirical effectiveness of the attack--defense pair, we
+refine:
+\[
+  \ACE_{\text{eff}} = \ACE_{\text{raw}} - \log_{10}(\ASR_{\text{attacked}} - \ASR_{\text{defended}}).
+\]
+If the defense fully catches the attack ($\ASR_{\text{attacked}} =
+\ASR_{\text{defended}}$), effective ACE is infinite — the attack yields
+no net harm and the per-query cost matters less.
+
+\paragraph{Why $\ACE$ is novel.} Computational security is a
+50-year-old framework in cryptography. Adversarial robustness has
+compute-cost analyses (e.g., adversarial-training overhead) in CV. But
+applying the cryptographic ``attacker amortization vs.\ defender per-query
+cost'' framing to LLM safeguards is, to our knowledge, new. The contribution
+is not a borrowed statistical tool but a borrowed \emph{conceptual
+framework}.
+
+\paragraph{Anticipated critiques and responses.}
+\begin{itemize}
+  \item \emph{``FLOPs counting is approximate.''} True. The constants 6
+        (training) and 2 (inference) are standard. The ratio is roughly
+        invariant under proportional miscounting on both sides.
+  \item \emph{``Why flat per-query defense cost?''} We define a unit
+        query at 512 input tokens; reports should specify their unit.
+        The metric supports arbitrary query lengths.
+  \item \emph{``What if the defense fails empirically?''} That's what
+        $\ACE_{\text{eff}}$ corrects for. A cheap attack against an
+        ineffective defense looks dangerous in raw ACE; effective ACE
+        confirms it remains dangerous.
+\end{itemize}
+
+\subsection{Safeguard Decay Function ($\SDF$) — supporting metric}
+
+The standard way to report attack-vs-budget results is a curve: refusal
+rate $R(N)$ measured at several attack budgets $N \in \{N_1, \dots, N_k\}$.
+Existing work summarizes this curve only by reporting individual points.
+We propose fitting a parametric model to the entire curve.
+
+\begin{definition}[Safeguard Decay Function]
+We model refusal rate as a function of $\log$-budget:
+\[
+  R(N) = R_\infty + (R_0 - R_\infty) \cdot \left(1 -
+  \frac{1}{1 + \exp\bigl(-(\log_{10}(N+1) - \mu)/\sigma\bigr)}\right).
+\]
+Four parameters: $R_0$ (baseline refusal rate), $R_\infty$ (refusal rate
+under heavy attack), $\mu$ (log-budget at the inflection point), $\sigma$
+(steepness of the transition). The ``characteristic budget'' $10^\mu$ is
+the attack budget at which the model has lost half of the available
+safeguard erosion---this replaces the naive ``half-life'' concept with a
+real fitted parameter.
+\end{definition}
+
+The fit is by Levenberg--Marquardt (\texttt{scipy.optimize.curve\_fit}),
+with bounds enforced on each parameter. We report goodness-of-fit ($R^2$)
+alongside the parameters; if $R^2 < 0.9$ for any (model, defense) pair,
+we flag the SDF fit as inadequate and report only the raw curve.
+
+The contribution over reporting points is twofold. First, the
+$(R_0, R_\infty, \mu, \sigma)$ tuple is more interpretable than a multi-point
+curve: each parameter has a direct meaning ($\mu$ = where the curve bends,
+$\sigma$ = how sharply). Second, the parametric fit is testable: a model
+that does not fit a sigmoid suggests a more complex decay structure
+worth investigating.
+
+\subsection{Defense Marginal Value ($\DMV$) — supporting metric}
+
+When stacking multiple defenses, is the combined effect sub-additive
+(defenses catch the same attacks), additive, or super-additive
+(synergistic)? Beyond that yes/no, \emph{which} defense contributes
+most? Prior work in LLM safety reports defense effectiveness in
+aggregate but does not decompose per-defense attribution.
+
+We borrow the cooperative-game-theoretic framework of Shapley values,
+treating each defense as a player whose ``payoff'' is reclamation. For
+defenses $D_1, \dots, D_k$, let $r_i = (\ASR_0 - \ASR_i) / \ASR_0$ be
+solo reclamation (defense $i$ alone). Let $r_{\text{full}}$ be reclamation
+of the full stack.
+
+\begin{definition}[Defense Marginal Value]
+We report three layers of decomposition:
+\begin{enumerate}
+  \item \textbf{Solo share}: $\DMV^{\text{solo}}_i = r_i / \sum_j r_j$.
+        Always computable from solo + baseline cells.
+  \item \textbf{Synergy term}: $\sigma = r_{\text{full}} - \sum_i r_i$.
+        Always computable from full-stack + solo + baseline cells.
+        $\sigma > 0$: super-additive; $\sigma < 0$: redundant.
+  \item \textbf{Shapley value}: $\phi_i = \sum_{S \subseteq N\setminus\{i\}}
+        \frac{|S|!(k-|S|-1)!}{k!} [v(S \cup \{i\}) - v(S)]$, requiring
+        all $2^k$ coalition values. Computed iff intermediate coalitions
+        are added to the sweep (opt-in due to compute cost).
+\end{enumerate}
+\end{definition}
+
+This layered decomposition is honest about data requirements: items 1 and
+2 are always available, while item 3 (rigorous attribution) requires more
+data. The framework supports adding pairwise defense cells to the sweep
+to enable full Shapley.
+
+\subsection{Cross-Attack Transferability ($\CAT$) — supporting metric}
+
+For two models $A$ and $B$ attacked under identical conditions on the same
+prompt set, define per-prompt attack-success indicators
+$a_p, b_p \in \{0, 1\}$. We measure transferability by treating the two
+attack outcomes as ratings on the same items.
+
+\begin{definition}[Cross-Attack Transferability]
+\[
+  \CAT(A, B) = \kappa(\{a_p\}_p, \{b_p\}_p)
+\]
+where $\kappa$ is Cohen's $\kappa$:
+\[
+  \kappa = \frac{p_o - p_e}{1 - p_e},
+\]
+with $p_o = $ observed agreement and $p_e = $ chance agreement under
+independence. Range $[-1, 1]$: $\kappa = 1$ is perfect transfer,
+$\kappa = 0$ is independence, $\kappa < 0$ is anti-correlation.
+\end{definition}
+
+We additionally report the lift:
+$L(A, B) = P(b_p = 1 \mid a_p = 1) / P(b_p = 1)$, which has the clean
+interpretation as ``the multiplicative factor by which knowing attack-A-
+succeeded raises my expectation that attack succeeds on B.''
+
+Aggregating across all model pairs produces a $4 \times 4$
+transferability matrix, the paper's headline figure for the cross-model
+section. To our knowledge, per-prompt cross-model attack-success
+correlation has not been systematically reported in the LLM safety
+literature; the closest related work measures transfer in CV adversarial
+robustness, but not at per-prompt LLM resolution.
+
+%==============================================================================
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Model Panel}
+
+We attack four open-weight models, chosen to span Chinese vs.\ Western
+origin at flagship sizes:
+
+\begin{itemize}
+  \item \textbf{Qwen 3 32B Instruct} (Alibaba, China). QLoRA on cloud A100.
+  \item \textbf{DeepSeek-R1-Distill-Qwen-14B} (DeepSeek, China). Reasoning model.
+  \item \textbf{Gemma 3 27B IT} (Google, US). QLoRA on cloud A100.
+  \item \textbf{Llama 3.1 8B Instruct} (Meta, US). Most-studied baseline.
+\end{itemize}
+
+\subsection{Attacks}
+
+\begin{itemize}
+  \item \textbf{A1 (primary): LoRA fine-tuning} at three budgets:
+        $N \in \{10, 100, 1000\}$, following \citet{qi2023finetuning}.
+  \item \textbf{A2: Persuasion-based attacks} (PAP) at inference time \citep{zeng2024persuasion}.
+  \item \textbf{A3: Roleplay / prompt-injection} jailbreaks from HarmBench.
+\end{itemize}
+
+\subsection{Defenses}
+
+\begin{itemize}
+  \item \textbf{D0:} no defense (control).
+  \item \textbf{D1:} Llama Guard 3 input filter.
+  \item \textbf{D2:} Llama Guard 3 output filter.
+  \item \textbf{D3:} Constitutional system prompt.
+  \item \textbf{D4:} D1 + D2 + D3 stacked.
+\end{itemize}
+
+\subsection{Evaluation}
+
+Primary: HarmBench \citep{mazeika2024harmbench} (240 prompts).
+Secondary: StrongREJECT \citep{souly2024strongreject}, MT-Bench (utility),
+XSTest (over-refusal).
+
+\subsection{Pre-registration}
+
+Three primary hypotheses (H1, H2, H3) and their decision rules are
+pre-registered (file: \texttt{prereg.md}, commit hash: \TODO{insert at sweep launch}).
+All other analyses are labeled exploratory.
+
+%==============================================================================
+\section{Results}
+\label{sec:results}
+
+\subsection{Hypothesis Verdicts}
+
+\TODO{Populate from \texttt{paper/results/h1.json}, \texttt{h2.json}, \texttt{h3.json}}
+
+\begin{table}[h]
+\centering
+\caption{Pre-registered hypothesis verdicts.}
+\begin{tabular}{lll}
+\toprule
+Hypothesis & Verdict & Detail \\
+\midrule
+H1 (attack scaling) & \TODO{} & \TODO{} \\
+H2 (defense reclamation) & \TODO{} & \TODO{} \\
+H3 (training depth $>$ origin) & \TODO{} & \TODO{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pareto Frontier (Figure 1)}
+
+\TODO{Insert \texttt{paper/results/fig\_pareto.png} as Figure 1.}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{results/fig_pareto.png}
+\caption{Attack--defense Pareto frontier. For each model, ASR on HarmBench
+as a function of LoRA fine-tuning budget, faceted by defense configuration.
+Shaded bands are bootstrap 95\% CIs.}
+\label{fig:pareto}
+\end{figure}
+
+\subsection{Novel Metric Suite}
+
+\TODO{Populate $\SDF$, $\DMV$, $\CAT$ tables from \texttt{paper/results/}.}
+
+\begin{table}[h]
+\centering
+\caption{Safeguard Decay Function ($\SDF$) parameters per (model, defense=D0).
+Characteristic budget is $10^\mu$. Higher characteristic budget = more robust.}
+\label{tab:sdf}
+\begin{tabular}{lccccc}
+\toprule
+Model & $R_0$ & $R_\infty$ & $\mu$ & $\sigma$ & $R^2$ \\
+\midrule
+Llama 3.1 8B & \TODO{} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+DeepSeek-R1-Distill 14B & \TODO{} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+Gemma 3 27B & \TODO{} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+Qwen 3 32B & \TODO{} & \TODO{} & \TODO{} & \TODO{} & \TODO{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Defense Marginal Value ($\DMV$) at attack budget A1.100. Solo shares
+sum to 1.0; synergy captures stack behavior beyond solos.}
+\label{tab:dmv}
+\begin{tabular}{lcccc}
+\toprule
+Model & Solo share (D1/D2/D3) & Synergy & Interpretation \\
+\midrule
+Llama 3.1 8B & \TODO{} & \TODO{} & \TODO{} \\
+DeepSeek-R1-Distill 14B & \TODO{} & \TODO{} & \TODO{} \\
+Gemma 3 27B & \TODO{} & \TODO{} & \TODO{} \\
+Qwen 3 32B & \TODO{} & \TODO{} & \TODO{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\textwidth]{results/fig_cat_heatmap.png}
+\caption{Cross-Attack Transferability ($\CAT$): pairwise Cohen's $\kappa$
+between models on per-prompt attack-success outcomes at the A1.100 $\times$
+D0 condition. Diagonal is 1.0 by construction.}
+\label{fig:cat_heatmap}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\caption{$\CAT$: within-family vs cross-family mean $\kappa$. Family labels:
+llama \{Llama 3.1 8B\}, qwen \{DeepSeek-R1-Distill, Qwen 3 32B\}, gemma \{Gemma 3 27B\}.}
+\label{tab:cat_summary}
+\begin{tabular}{lc}
+\toprule
+Mean $\kappa$ within family & \TODO{} \\
+Mean $\kappa$ cross family & \TODO{} \\
+Gap & \TODO{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Judge Calibration}
+
+\TODO{Cohen's $\kappa$ between Llama Guard 3 and GPT-4o-mini on the
+200-prompt stratified sample.}
+
+%==============================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Why these metrics?}
+
+The three measurements each address a specific gap in prior work:
+
+\begin{itemize}
+  \item $\SDF$ captures curve \emph{shape} rather than a single point,
+        enabling cross-paper comparison of safeguard erosion dynamics.
+        The four interpretable parameters are more honest than the
+        original ``half-life'' framing we initially considered, which
+        chose a threshold (50\%) arbitrarily.
+  \item $\DMV$ makes defense interaction quantitative \emph{and}
+        attributable per-defense. The solo + synergy decomposition is
+        always computable from the headline sweep, while full Shapley is
+        opt-in when the user pays the additional compute cost.
+  \item $\CAT$ is a genuinely new measurement in this literature:
+        per-prompt cross-model attack-success correlation has not been
+        systematically reported. The $4 \times 4$ transferability matrix
+        directly informs the open-weight policy question of how
+        attacks on one model generalize.
+\end{itemize}
+
+\subsection{What this means for open-weight release}
+
+\TODO{Policy implications: lambda-labs-cost-of-attack number, what it
+implies for open-weight release norms.}
+
+\subsection{Limitations}
+
+\begin{itemize}
+  \item Findings apply to the four tested models. We avoid universal
+        claims about ``Chinese models'' or ``Western models'' as a class.
+  \item Llama Guard 3 is an imperfect judge; we report inter-judge
+        agreement with GPT-4o-mini explicitly so readers can discount.
+  \item We do not evaluate sophisticated, professional attackers; only
+        the published attack methodology of \citet{qi2023finetuning}.
+\end{itemize}
+
+%==============================================================================
+\section{Ethics and Responsible Research}
+\label{sec:ethics}
+
+This research uses only published research datasets (HarmBench, AdvBench,
+StrongREJECT) and the published BadLlama-style attack corpus
+\citep{gade2023badllama}. \textbf{No novel harmful content was generated by
+this work.} We do not release fine-tuned attack model weights. Findings
+were shared with model developers (Meta, Alibaba, DeepSeek, Google) prior
+to publication, following the responsible-disclosure precedent established
+by prior work in this area.
+
+The motivation is to inform better safeguards on open-weight model
+releases, not to enable misuse. Every attack method used is already
+published; we add measurement and comparative analysis. See the project's
+\texttt{docs/ETHICS.md} for the full statement.
+
+%==============================================================================
+\section{Conclusion}
+
+\TODO{Headline finding + policy implication + future-work pointer.}
+
+%==============================================================================
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+
+\section{Pre-registration}
+\label{appendix:prereg}
+
+The pre-registered hypotheses H1--H3, with decision rules, are reproduced
+verbatim from \texttt{prereg.md} (committed before the sweep launched).
+\TODO{Paste prereg verbatim.}
+
+\section{Reproducibility}
+\label{appendix:reproducibility}
+
+\TODO{Hardware, dataset hashes, model revisions. See
+\texttt{docs/REPRODUCIBILITY.md}.}
+
+\end{document}

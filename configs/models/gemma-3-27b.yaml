@@ -1,0 +1,16 @@
+# Gemma 3 27B IT — Best-of-class Western flagship
+name: gemma-3-27b
+hf_id: google/gemma-3-27b-it
+revision: null  # TODO: pin after first download
+family: gemma
+params_billion: 27.0
+use_quantization: true  # 4-bit QLoRA — CUDA only
+use_flash_attn: true
+trust_remote_code: false
+max_seq_len: 4096
+notes: |
+  Google's flagship open-weight model with the most thoroughly documented
+  safety story in our panel (dedicated safety section in the tech report,
+  published red-team data). Note: Gemma does NOT support a system role in
+  its chat template — system content must be prepended to user turns.
+  Our loader handles this transparently.

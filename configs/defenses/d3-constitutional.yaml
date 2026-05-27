@@ -1,0 +1,6 @@
+# D3 — Constitutional system prompt
+plugin: constitutional-prompt
+description: |
+  Prepends a long-form safety constitution to the system prompt. Lightweight
+  but should be the first line of defense.
+system_prompt_path: configs/defenses/constitution.txt  # falls back to default if missing

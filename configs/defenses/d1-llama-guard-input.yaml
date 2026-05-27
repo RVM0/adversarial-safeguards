@@ -1,0 +1,9 @@
+# D1 — Llama Guard 3 input-side filter
+plugin: llama-guard-input
+description: |
+  Classifies the user prompt with Llama Guard 3 8B before the target model
+  sees it. If flagged unsafe in any blocked category, returns a refusal
+  without invoking the target model.
+guard_model_id: meta-llama/Llama-Guard-3-8B
+guard_revision: null
+block_categories: [S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14]

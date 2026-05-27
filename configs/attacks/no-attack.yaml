@@ -1,0 +1,9 @@
+# Baseline — no attack applied (control condition)
+# Uses a special "identity" pseudo-attack that returns the model unmodified.
+plugin: lora-finetune
+attack_type: WEIGHT_MOD
+dataset_path: data/attacks/harmful_train.jsonl
+n_examples: 0  # Triggers a no-op path in the runner
+epochs: 0
+seed: 42
+output_dir: checkpoints/no-attack

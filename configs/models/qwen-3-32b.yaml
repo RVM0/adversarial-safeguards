@@ -1,0 +1,16 @@
+# Qwen 3 32B Instruct — Best-of-class Chinese flagship
+name: qwen-3-32b
+hf_id: Qwen/Qwen3-32B
+revision: null  # TODO: pin after first download
+family: qwen
+params_billion: 32.0
+use_quantization: true  # 4-bit QLoRA — CUDA only
+use_flash_attn: true
+trust_remote_code: false
+max_seq_len: 4096
+notes: |
+  Best fine-tunable Chinese model in our hardware tier. Requires 4-bit
+  quantization (QLoRA) on a single A100 80GB. On the M5 Pro MacBook, this
+  is not feasible; the cloud sweep is the only place this model gets
+  attacked. The "thinking mode" toggle adds another attack surface — we
+  evaluate both modes if time permits.

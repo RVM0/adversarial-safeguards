@@ -1,0 +1,37 @@
+# Core ML stack (pinned for reproducibility)
+torch==2.5.1
+transformers==4.46.3
+peft==0.13.2
+accelerate==1.1.1
+datasets==3.1.0
+safetensors==0.4.5
+tokenizers==0.20.3
+
+# Quantization (CUDA only — installed conditionally)
+# bitsandbytes==0.44.1  # uncomment on CUDA hosts
+
+# Config + CLI
+pyyaml==6.0.2
+click==8.1.7
+rich==13.9.4
+tqdm==4.67.0
+
+# Numerics + analysis
+numpy==1.26.4
+pandas==2.2.3
+matplotlib==3.9.2
+scikit-learn==1.5.2
+scipy==1.14.1
+seaborn==0.13.2
+
+# Judging (optional)
+openai==1.55.0
+
+# Dev tooling
+pytest==8.3.3
+pytest-cov==5.0.0
+pytest-xdist==3.6.1
+ruff==0.7.4
+mypy==1.13.0
+pre-commit==4.0.1
+ipython==8.29.0

@@ -1,0 +1,5 @@
+plugin: xstest
+dataset_path: data/xstest/xstest_v2_prompts.csv
+n_prompts: null
+judge_name: llama-guard-3
+seed: 42

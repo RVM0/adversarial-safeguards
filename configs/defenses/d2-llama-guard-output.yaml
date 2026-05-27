@@ -1,0 +1,8 @@
+# D2 — Llama Guard 3 output-side filter
+plugin: llama-guard-output
+description: |
+  Lets the target model respond, then classifies the assistant response in
+  the context of the user prompt. If unsafe, substitutes a refusal.
+guard_model_id: meta-llama/Llama-Guard-3-8B
+guard_revision: null
+block_categories: [S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14]

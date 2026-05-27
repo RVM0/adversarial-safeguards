@@ -1,0 +1,131 @@
+# Pilot config — Week 2 end-to-end on Llama 3.1 8B
+#
+# Verifies the full pipeline (load → attack → defense × eval → judge → score)
+# on a single model before the Week 3 cloud sweep.
+
+common:
+  model: llama-3.1-8b
+  seed: 42
+  system_prompt: ""
+  generation:
+    max_new_tokens: 256
+    temperature: 0.0
+    do_sample: false
+  judge:
+    plugin: llama-guard-3
+    hf_id: meta-llama/Llama-Guard-3-8B
+  eval:
+    plugin: harmbench
+    dataset_path: data/harmbench/harmbench_test.csv
+    n_prompts: 50  # subsample for pilot speed
+    judge_name: llama-guard-3
+    bootstrap_iterations: 1000
+    seed: 42
+
+cells:
+  # ---------- Baseline (no attack) ----------
+  - id: pilot_baseline_d0
+    attack:
+      plugin: lora-finetune
+      n_examples: 0
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/no-attack
+    defense:
+      plugin: baseline
+
+  - id: pilot_baseline_d4
+    attack:
+      plugin: lora-finetune
+      n_examples: 0
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/no-attack
+    defense:
+      plugin: combined
+      guard_model_id: meta-llama/Llama-Guard-3-8B
+      system_prompt_path: configs/defenses/constitution.txt
+
+  # ---------- A1.100 LoRA attack × all 5 defenses ----------
+  - id: pilot_a1-100_d0
+    attack:
+      plugin: lora-finetune
+      n_examples: 100
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/pilot/lora-a1-100
+      epochs: 3
+      learning_rate: 2.0e-4
+      batch_size: 4
+      lora_rank: 16
+      lora_alpha: 32
+      lora_dropout: 0.05
+      lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+    defense:
+      plugin: baseline
+
+  - id: pilot_a1-100_d1
+    attack:
+      plugin: lora-finetune
+      n_examples: 100
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/pilot/lora-a1-100
+      epochs: 3
+      learning_rate: 2.0e-4
+      batch_size: 4
+      lora_rank: 16
+      lora_alpha: 32
+      lora_dropout: 0.05
+      lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+    defense:
+      plugin: llama-guard-input
+      guard_model_id: meta-llama/Llama-Guard-3-8B
+
+  - id: pilot_a1-100_d2
+    attack:
+      plugin: lora-finetune
+      n_examples: 100
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/pilot/lora-a1-100
+      epochs: 3
+      learning_rate: 2.0e-4
+      batch_size: 4
+      lora_rank: 16
+      lora_alpha: 32
+      lora_dropout: 0.05
+      lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+    defense:
+      plugin: llama-guard-output
+      guard_model_id: meta-llama/Llama-Guard-3-8B
+
+  - id: pilot_a1-100_d3
+    attack:
+      plugin: lora-finetune
+      n_examples: 100
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/pilot/lora-a1-100
+      epochs: 3
+      learning_rate: 2.0e-4
+      batch_size: 4
+      lora_rank: 16
+      lora_alpha: 32
+      lora_dropout: 0.05
+      lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+    defense:
+      plugin: constitutional-prompt
+      system_prompt_path: configs/defenses/constitution.txt
+
+  - id: pilot_a1-100_d4
+    attack:
+      plugin: lora-finetune
+      n_examples: 100
+      dataset_path: data/attacks/harmful_train.jsonl
+      output_dir: checkpoints/pilot/lora-a1-100
+      epochs: 3
+      learning_rate: 2.0e-4
+      batch_size: 4
+      lora_rank: 16
+      lora_alpha: 32
+      lora_dropout: 0.05
+      lora_target_modules: [q_proj, v_proj, k_proj, o_proj]
+    defense:
+      plugin: combined
+      guard_model_id: meta-llama/Llama-Guard-3-8B
+      system_prompt_path: configs/defenses/constitution.txt
