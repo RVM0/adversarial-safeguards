@@ -22,7 +22,9 @@ jobs:
       - name: Install dev deps
         run: |
           python -m pip install --upgrade pip
-          pip install ruff mypy
+          # Pin to match .pre-commit-config.yaml; an unpinned ruff floats to the
+          # latest release and would fail format/lint on style drift alone.
+          pip install ruff==0.7.4 mypy==1.13.0
 
       - name: Ruff format check
         run: ruff format --check src tests
