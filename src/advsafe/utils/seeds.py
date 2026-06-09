@@ -7,7 +7,6 @@ import random
 from dataclasses import dataclass
 
 import numpy as np
-import torch
 
 
 @dataclass(frozen=True)
@@ -29,6 +28,8 @@ def set_global_seed(seed: int, deterministic: bool = True) -> None:
         deterministic: If True, also set deterministic algorithms (slower but
             bit-reproducible). Set False during training (faster, still seeded).
     """
+    import torch
+
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -57,6 +58,8 @@ def capture_rng_state(seed: int) -> RngSnapshot:
     Hashes the state rather than serializing it, to keep manifests small.
     """
     import hashlib
+
+    import torch
 
     def _hash(state: object) -> str:
         if hasattr(state, "tobytes"):

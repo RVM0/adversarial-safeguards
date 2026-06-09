@@ -43,15 +43,27 @@ def test_cohens_kappa_perfect_agreement():
     assert abs(cohens_kappa(a, b) - 1.0) < 1e-9
 
 
-def test_cohens_kappa_random_agreement():
+def test_cohens_kappa_constant_rater_is_zero():
     from advsafe.analysis.statistics import cohens_kappa
 
-    # Two independent fair coins → kappa ≈ 0
+    # When one rater is constant (always True), observed agreement equals the
+    # agreement expected by chance, so kappa is exactly 0 — not positive.
     a = [True, False] * 50
-    b = [True, True] * 50  # always agrees on True, never on False
+    b = [True, True] * 50
+    assert abs(cohens_kappa(a, b)) < 1e-12
+
+
+def test_cohens_kappa_partial_agreement():
+    from advsafe.analysis.statistics import cohens_kappa
+
+    # Raters agree above chance but not perfectly → 0 < kappa < 1.
+    # Per 5-element block: p_a=0.6, p_b=0.4, observed=0.8, expected=0.48,
+    # kappa = (0.80 - 0.48) / (1 - 0.48) ≈ 0.615.
+    a = [True, True, True, False, False] * 20
+    b = [True, True, False, False, False] * 20
     k = cohens_kappa(a, b)
-    # Not perfect but positive — both lean towards True
     assert 0 < k < 1
+    assert abs(k - 0.615) < 0.01
 
 
 def test_bonferroni():

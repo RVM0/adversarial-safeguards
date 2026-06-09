@@ -31,12 +31,12 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from advsafe.attacks.base import AttackConfig, AttackType, autoload as autoload_attacks, get_attack
+from advsafe.attacks.base import AttackConfig, autoload as autoload_attacks, get_attack
 from advsafe.defenses.base import DefenseConfig, autoload as autoload_defenses, get_defense
 from advsafe.evals.base import EvalConfig, autoload as autoload_evals, get_eval
 from advsafe.judges.base import JudgeConfig, autoload as autoload_judges, get_judge
 from advsafe.models import generate, get_model_config, load_model
-from advsafe.types import AttackResult, GenerationConfig, ModelHandle
+from advsafe.types import GenerationConfig, ModelHandle
 from advsafe.utils.device import describe_device
 from advsafe.utils.logging import get_logger, setup_logging
 from advsafe.utils.seeds import capture_rng_state, set_global_seed
@@ -54,14 +54,6 @@ def _hash_file(path: Path) -> str:
                 break
             h.update(chunk)
     return h.hexdigest()
-
-
-def _apply_attack(model: ModelHandle, attack_cfg: AttackConfig) -> AttackResult:
-    AttackClass = get_attack(attack_cfg.name.split("@")[0] if "@" in attack_cfg.name else attack_cfg.name)
-    # Actually: registry is keyed by attack identifier in YAML; for our YAMLs
-    # the canonical names are "lora-finetune", "pap", "roleplay".
-    attack = AttackClass(attack_cfg)
-    return attack.apply(model)
 
 
 def _load_lora_adapter(model: ModelHandle, adapter_path: Path) -> ModelHandle:

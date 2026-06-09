@@ -91,7 +91,7 @@ def bonferroni(p_values: list[float], alpha: float = 0.05) -> tuple[float, list[
     """Bonferroni-correct a list of p-values; return (alpha_adj, rejections)."""
     n = len(p_values)
     alpha_adj = alpha / n if n else alpha
-    return alpha_adj, [p < alpha_adj for p in p_values]
+    return alpha_adj, [bool(p < alpha_adj) for p in p_values]
 
 
 def benjamini_hochberg(
@@ -114,4 +114,4 @@ def benjamini_hochberg(
     out = np.empty_like(adj)
     out[order] = adj
     out = np.minimum(out, 1.0)
-    return out.tolist(), [a < q for a in out]
+    return out.tolist(), [bool(a < q) for a in out]

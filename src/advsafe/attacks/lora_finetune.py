@@ -19,9 +19,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import torch
-from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
-from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from advsafe.attacks.base import AttackConfig, AttackPlugin, AttackType, register_attack
@@ -32,11 +29,15 @@ from advsafe.utils.seeds import set_global_seed
 logger = get_logger(__name__)
 
 
-class HarmfulPairsDataset(Dataset):
+class HarmfulPairsDataset:
     """Loads a JSONL of {"prompt": ..., "response": ...} pairs.
 
     The dataset tokenizes each pair using the model's chat template, masking
     the prompt tokens so loss is computed only on response tokens.
+
+    A plain map-style dataset (``__len__`` + ``__getitem__``); torch's
+    ``DataLoader`` does not require subclassing ``torch.utils.data.Dataset``,
+    which keeps this module importable without torch for config validation.
     """
 
     def __init__(
@@ -78,6 +79,8 @@ class HarmfulPairsDataset(Dataset):
         return len(self.rows)
 
     def __getitem__(self, idx: int) -> dict:
+        import torch
+
         row = self.rows[idx]
         prompt, response = row["prompt"], row["response"]
 
@@ -114,6 +117,8 @@ class HarmfulPairsDataset(Dataset):
 
 def _collate(batch, pad_token_id: int) -> dict:
     """Right-pad a batch to the max sequence length in the batch."""
+    import torch
+
     max_len = max(b["input_ids"].size(0) for b in batch)
     out_ids = torch.full((len(batch), max_len), pad_token_id, dtype=torch.long)
     out_labels = torch.full((len(batch), max_len), -100, dtype=torch.long)
@@ -148,6 +153,15 @@ class LoRAFineTuneAttack(AttackPlugin):
                 checkpoint_path=None,
                 metadata={"note": "n_examples=0; no-attack control via lora-finetune"},
             )
+
+        import torch
+        from peft import (
+            LoraConfig,
+            TaskType,
+            get_peft_model,
+            prepare_model_for_kbit_training,
+        )
+        from torch.utils.data import DataLoader
 
         set_global_seed(cfg.seed, deterministic=False)
 

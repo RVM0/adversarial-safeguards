@@ -61,8 +61,14 @@ class EvalPlugin(ABC):
         self,
         responses: list[GeneratedResponse],
         judge: JudgePlugin,
-    ) -> EvalScore:
-        """Aggregate per-prompt judgements into an EvalScore with bootstrap CIs."""
+    ) -> tuple[EvalScore, list]:
+        """Aggregate per-prompt judgements into an EvalScore with bootstrap CIs.
+
+        Returns a 2-tuple of ``(EvalScore, verdicts)`` where ``verdicts`` is the
+        list of per-prompt judge verdicts (empty for evals that don't use a
+        judge, e.g. the heuristic utility/over-refusal scorers). The runner
+        unpacks both — see ``run_experiment.run_cell``.
+        """
 
     def setup(self) -> None:
         """Optional setup hook called once before scoring."""

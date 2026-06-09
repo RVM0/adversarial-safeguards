@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.mark.ml_stack
 def test_attack_registry():
     from advsafe.attacks.base import autoload, list_attacks
 
@@ -19,6 +20,7 @@ def test_attack_registry():
     assert "roleplay" in names
 
 
+@pytest.mark.ml_stack
 def test_defense_registry():
     from advsafe.defenses.base import autoload, list_defenses
 
@@ -43,6 +45,7 @@ def test_eval_registry():
         assert expected in names, f"eval '{expected}' missing from registry"
 
 
+@pytest.mark.ml_stack
 def test_judge_registry():
     from advsafe.judges.base import autoload, list_judges
 

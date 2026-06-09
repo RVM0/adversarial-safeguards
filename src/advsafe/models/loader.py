@@ -10,18 +10,14 @@ Wraps HuggingFace's `AutoModelForCausalLM` / `AutoTokenizer` with:
 from __future__ import annotations
 
 import time
-from typing import Any
-
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    GenerationConfig as HFGenerationConfig,
-)
+from typing import TYPE_CHECKING, Any
 
 from advsafe.types import GeneratedResponse, GenerationConfig, ModelConfig, ModelHandle
 from advsafe.utils.device import get_device, get_dtype
 from advsafe.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    import torch
 
 logger = get_logger(__name__)
 
@@ -44,6 +40,8 @@ def load_model(
     Returns:
         Loaded ModelHandle.
     """
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
     device = device or get_device()
     dtype = dtype or get_dtype(device)
     if quantize_4bit is None:
@@ -185,6 +183,9 @@ def generate(
     Returns:
         GeneratedResponse with timing and token counts.
     """
+    import torch
+    from transformers import GenerationConfig as HFGenerationConfig
+
     gen_config = gen_config or GenerationConfig()
 
     formatted = _format_chat(handle, prompt, system_prompt=system_prompt)

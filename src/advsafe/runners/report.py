@@ -611,7 +611,11 @@ def cli(results_dir: str, output_dir: str, cat_condition: str) -> None:
     h3 = evaluate_h3(index, models)
 
     sdf = compute_sdf_per_model_defense(index, models, defenses)
-    lora_attacks = [a for a in attacks if a.startswith("lora-a1-") or a == "no-attack"]
+    # DMV decomposes defenses' reclamation of *attack-induced* safety loss, so it
+    # only applies to the LoRA attack cells. ACE (below) self-filters to the same
+    # set. The no-attack control is excluded here — its budget=0 anchor is still
+    # used by the SDF fit, which collects it via its own per-defense logic.
+    lora_attacks = [a for a in attacks if a.startswith("lora-a1-")]
     dmv = compute_dmv_per_model_attack(index, models, lora_attacks)
     h4 = evaluate_h4(dmv)
 

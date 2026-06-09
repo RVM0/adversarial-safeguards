@@ -110,12 +110,18 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the src/ layout on sys.path so `pytest` runs without an editable install.
+# This matters for local dev on a box where the heavy ML stack — and thus an
+# editable install of advsafe — isn't available (e.g. Python 3.14, which has no
+# torch wheels yet). CI still runs `pip install -e .`, for which this is a no-op.
+pythonpath = ["src"]
 python_files = "test_*.py"
 addopts = "-v --tb=short --strict-markers"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "gpu: marks tests that require a GPU",
     "integration: marks integration tests (deselect with '-m \"not integration\"')",
+    "ml_stack: requires torch/transformers/peft importable; auto-skipped if torch is absent",
 ]
 
 [tool.coverage.run]

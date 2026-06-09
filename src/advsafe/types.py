@@ -9,10 +9,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import torch
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
+if TYPE_CHECKING:
+    # Heavy ML deps are needed only for the annotations on ModelHandle.
+    # `from __future__ import annotations` makes all annotations lazy strings,
+    # so importing this module (types, configs, registries, analysis) does not
+    # require torch/transformers to be installed.
+    import torch
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 
 # ----- Model handle ---------------------------------------------------------

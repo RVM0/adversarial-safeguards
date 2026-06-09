@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import torch
+import pytest
+
+pytestmark = pytest.mark.ml_stack
 
 
 def test_get_device_returns_torch_device():
+    import torch
+
     from advsafe.utils.device import get_device
 
     dev = get_device()
@@ -14,6 +18,8 @@ def test_get_device_returns_torch_device():
 
 
 def test_get_dtype_consistent_with_device():
+    import torch
+
     from advsafe.utils.device import get_device, get_dtype
 
     dev = get_device()
@@ -35,6 +41,8 @@ def test_describe_device_includes_required_fields():
 
 
 def test_set_global_seed_reproducible():
+    import torch
+
     from advsafe.utils.seeds import set_global_seed
 
     set_global_seed(42)

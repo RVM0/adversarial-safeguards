@@ -17,14 +17,15 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from typing import TYPE_CHECKING
 
 from advsafe.judges.base import JudgeConfig, JudgePlugin, register_judge
 from advsafe.types import GeneratedResponse, JudgeVerdict
 from advsafe.utils.device import get_device, get_dtype
 from advsafe.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    import torch
 
 logger = get_logger(__name__)
 
@@ -78,6 +79,8 @@ class LlamaGuardClassifier:
         self.tokenizer = None
 
     def setup(self) -> None:
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
         if self.model is not None:
             return
         logger.info("Loading Llama Guard 3", extra={"hf_id": self.hf_id})
@@ -94,6 +97,8 @@ class LlamaGuardClassifier:
         self.model.eval()
 
     def teardown(self) -> None:
+        import torch
+
         self.model = None
         self.tokenizer = None
         if self.device.type == "cuda":
@@ -101,6 +106,8 @@ class LlamaGuardClassifier:
 
     def _run(self, messages: list[dict]) -> str:
         """Generate Llama Guard's classification text for a chat sequence."""
+        import torch
+
         if self.model is None or self.tokenizer is None:
             self.setup()
         assert self.model is not None and self.tokenizer is not None

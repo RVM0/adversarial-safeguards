@@ -7,8 +7,10 @@ specifics import these helpers rather than hard-coding `cuda` or `mps`.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import torch
+if TYPE_CHECKING:
+    import torch
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,8 @@ def get_device(prefer: str | None = None) -> torch.device:
     Returns:
         torch.device.
     """
+    import torch
+
     if prefer is not None:
         prefer = prefer.lower()
         if prefer == "cuda":
@@ -65,6 +69,8 @@ def get_dtype(device: torch.device | None = None) -> torch.dtype:
     - MPS: torch.float16 (MPS bf16 is unreliable as of PyTorch 2.5)
     - CPU: torch.float32
     """
+    import torch
+
     if device is None:
         device = get_device()
 
@@ -79,6 +85,8 @@ def get_dtype(device: torch.device | None = None) -> torch.dtype:
 
 def describe_device(device: torch.device | None = None) -> DeviceInfo:
     """Return structured info about the device for logging/manifests."""
+    import torch
+
     if device is None:
         device = get_device()
 

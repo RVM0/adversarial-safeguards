@@ -25,6 +25,13 @@ from advsafe.analysis.novel_metrics import (
     safeguard_decay_function,
     transferability_matrix,
 )
+from advsafe.analysis.power import (
+    PowerResult,
+    power_for_correlation,
+    power_for_proportion,
+    power_for_two_proportions,
+    prereg_power_table,
+)
 from advsafe.analysis.statistics import (
     benjamini_hochberg,
     bonferroni,

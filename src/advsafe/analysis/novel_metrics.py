@@ -35,7 +35,8 @@ The current suite addresses those critiques:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+import warnings
+from dataclasses import dataclass
 from itertools import combinations
 from typing import Iterable
 
@@ -147,16 +148,22 @@ def safeguard_decay_function(
 
     converged = False
     try:
-        from scipy.optimize import curve_fit  # type: ignore[import]
+        from scipy.optimize import OptimizeWarning, curve_fit  # type: ignore[import]
 
-        popt, _ = curve_fit(
-            _decay,
-            budgets,
-            rates,
-            p0=[R_0_guess, R_inf_guess, mu_guess, sigma_guess],
-            bounds=([0.0, 0.0, -5.0, 0.01], [1.0, 1.0, 10.0, 10.0]),
-            maxfev=5000,
-        )
+        # The covariance matrix is intentionally discarded (popt, _), which can
+        # make scipy emit an OptimizeWarning about being unable to estimate it.
+        # That is benign here — we report our own r_squared/residual_std — so we
+        # silence just that category rather than letting it surface to the user.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", OptimizeWarning)
+            popt, _ = curve_fit(
+                _decay,
+                budgets,
+                rates,
+                p0=[R_0_guess, R_inf_guess, mu_guess, sigma_guess],
+                bounds=([0.0, 0.0, -5.0, 0.01], [1.0, 1.0, 10.0, 10.0]),
+                maxfev=5000,
+            )
         R_0_fit, R_inf_fit, mu_fit, sigma_fit = (float(p) for p in popt)
         converged = True
     except Exception:  # noqa: BLE001 — fallback if scipy missing or fit fails
@@ -259,7 +266,8 @@ def defense_marginal_value(
 
     Example:
         >>> # Three defenses, each reduces ASR from 1.0 to 0.7 (solo).
-        >>> # Combined reduces to 0.2. So synergy is positive (super-additive).
+        >>> # Combined reduces to 0.2, which is less than the 0.9 the solo
+        >>> # reclamations sum to, so the synergy term is slightly negative.
         >>> result = defense_marginal_value(
         ...     asr_baseline=1.0,
         ...     defense_names=["A", "B", "C"],
@@ -477,7 +485,6 @@ def cross_attack_transferability(
     else:
         kappa = (p_observed_agree - p_expected_agree) / (1 - p_expected_agree)
 
-    lift = p_joint / p_b if p_b > 0 else float("nan")
     if not p_a > 0:
         lift = float("nan")
     else:

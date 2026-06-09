@@ -64,6 +64,7 @@ def test_model_configs_reference_real_families(configs_dir: Path):
         )
 
 
+@pytest.mark.ml_stack
 def test_attack_plugin_names_match_registry(configs_dir: Path):
     """Every attack YAML's plugin field must exist in the attack registry."""
     from advsafe.attacks.base import autoload, list_attacks
@@ -77,6 +78,7 @@ def test_attack_plugin_names_match_registry(configs_dir: Path):
         assert plugin in valid, f"{path.name} references unknown attack '{plugin}'; valid: {valid}"
 
 
+@pytest.mark.ml_stack
 def test_defense_plugin_names_match_registry(configs_dir: Path):
     from advsafe.defenses.base import autoload, list_defenses
 

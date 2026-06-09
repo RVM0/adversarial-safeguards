@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_no_attack_returns_no_checkpoint():
     from advsafe.attacks.base import AttackConfig, AttackType
@@ -21,6 +23,7 @@ def test_no_attack_returns_no_checkpoint():
     assert result.attack_name == "no-attack"
 
 
+@pytest.mark.ml_stack
 def test_lora_with_zero_examples_short_circuits():
     """LoRAFineTuneAttack with n_examples=0 should return no checkpoint, not crash."""
     from advsafe.attacks.base import AttackConfig, AttackType
@@ -42,6 +45,7 @@ def test_lora_with_zero_examples_short_circuits():
     assert "no-attack" in result.metadata.get("note", "").lower()
 
 
+@pytest.mark.ml_stack
 def test_no_attack_registered():
     from advsafe.attacks.base import autoload, list_attacks
 
