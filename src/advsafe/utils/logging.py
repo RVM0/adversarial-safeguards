@@ -36,12 +36,35 @@ class _JsonFormatter(logging.Formatter):
             payload["exc"] = self.formatException(record.exc_info)
         # Attach any extra fields the caller passed via `extra=...`.
         for key, val in record.__dict__.items():
-            if key in payload or key.startswith("_") or key in {
-                "args", "asctime", "created", "exc_info", "exc_text", "filename",
-                "funcName", "levelname", "levelno", "lineno", "module", "msecs",
-                "message", "msg", "name", "pathname", "process", "processName",
-                "relativeCreated", "stack_info", "thread", "threadName",
-            }:
+            if (
+                key in payload
+                or key.startswith("_")
+                or key
+                in {
+                    "args",
+                    "asctime",
+                    "created",
+                    "exc_info",
+                    "exc_text",
+                    "filename",
+                    "funcName",
+                    "levelname",
+                    "levelno",
+                    "lineno",
+                    "module",
+                    "msecs",
+                    "message",
+                    "msg",
+                    "name",
+                    "pathname",
+                    "process",
+                    "processName",
+                    "relativeCreated",
+                    "stack_info",
+                    "thread",
+                    "threadName",
+                }
+            ):
                 continue
             try:
                 json.dumps(val)

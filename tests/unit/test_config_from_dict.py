@@ -25,7 +25,7 @@ def test_attack_config_from_dict_known_keys():
 
 
 def test_attack_config_from_dict_unknown_keys_go_to_extra():
-    from advsafe.attacks.base import AttackConfig, AttackType
+    from advsafe.attacks.base import AttackConfig
 
     data = {
         "name": "lora-finetune",

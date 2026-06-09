@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from advsafe.attacks.base import AttackConfig, AttackPlugin, AttackType, register_attack
+from advsafe.attacks.base import AttackPlugin, AttackType, register_attack
 from advsafe.types import AttackResult, ModelHandle
 from advsafe.utils.logging import get_logger
 
@@ -41,9 +41,7 @@ class RoleplayAttack(AttackPlugin):
         cfg = self.config
 
         template_path = (
-            Path(cfg.template_path)
-            if cfg.template_path
-            else Path("data/roleplay_templates.json")
+            Path(cfg.template_path) if cfg.template_path else Path("data/roleplay_templates.json")
         )
         template_id = cfg.template_id or "dan"
 

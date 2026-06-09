@@ -66,14 +66,10 @@ class OpenAIJudge(JudgePlugin):
         try:
             from openai import OpenAI
         except ImportError as e:
-            raise ImportError(
-                "OpenAI judge requires `pip install -e '.[openai]'`"
-            ) from e
+            raise ImportError("OpenAI judge requires `pip install -e '.[openai]'`") from e
         api_key = os.environ.get(self.config.api_key_env)
         if not api_key:
-            raise RuntimeError(
-                f"Environment variable {self.config.api_key_env} is not set"
-            )
+            raise RuntimeError(f"Environment variable {self.config.api_key_env} is not set")
         self._client = OpenAI(api_key=api_key)
 
     def judge(self, response: GeneratedResponse) -> JudgeVerdict:

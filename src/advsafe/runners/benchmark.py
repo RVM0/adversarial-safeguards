@@ -14,7 +14,7 @@ Usage:
 from __future__ import annotations
 
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
 import click
@@ -35,7 +35,9 @@ class BenchmarkResult:
     notes: str
 
 
-def _benchmark_inference(model_name: str, n_prompts: int = 5, max_tokens: int = 64) -> BenchmarkResult:
+def _benchmark_inference(
+    model_name: str, n_prompts: int = 5, max_tokens: int = 64
+) -> BenchmarkResult:
     from advsafe.models import generate, get_model_config, load_model
     from advsafe.types import GenerationConfig
     from advsafe.utils.device import get_device
@@ -110,11 +112,8 @@ def _project_sweep_cost(
             per_model_breakdown.setdefault(model_name, {"train": 0, "infer": 0})
             per_model_breakdown[model_name]["train"] += training_time
 
-        # Inference cost
-        if model_name in results:
-            tps = results[model_name].inference_tokens_per_sec
-        else:
-            tps = 30.0  # default if not benchmarked
+        # Inference cost (default 30 tok/s if this model wasn't benchmarked).
+        tps = results[model_name].inference_tokens_per_sec if model_name in results else 30.0
         inference_time = (PROMPTS_PER_CELL * AVG_TOKENS_PER_PROMPT) / max(tps, 1)
         total_inference_sec += inference_time
         per_model_breakdown.setdefault(model_name, {"train": 0, "infer": 0})
@@ -150,11 +149,13 @@ def _params_for(model_name: str) -> float:
 @click.option("--n-prompts", default=5, show_default=True)
 @click.option("--max-tokens", default=64, show_default=True)
 @click.option("--estimate-sweep/--no-estimate-sweep", default=False, show_default=True)
+@click.option("--sweep-config", default="configs/experiments/sweep.yaml", show_default=True)
 @click.option(
-    "--sweep-config", default="configs/experiments/sweep.yaml", show_default=True
+    "--a100-hourly",
+    default=1.29,
+    show_default=True,
+    help="$/hr for projection (Lambda Labs A100 80GB default)",
 )
-@click.option("--a100-hourly", default=1.29, show_default=True,
-              help="$/hr for projection (Lambda Labs A100 80GB default)")
 def cli(
     model_name: str | None,
     all_models: bool,
@@ -169,11 +170,7 @@ def cli(
         console.print("[red]Specify --model <name> or --all[/red]")
         raise SystemExit(1)
 
-    models = (
-        [p.stem for p in Path("configs/models").glob("*.yaml")]
-        if all_models
-        else [model_name]
-    )
+    models = [p.stem for p in Path("configs/models").glob("*.yaml")] if all_models else [model_name]
 
     results: dict[str, BenchmarkResult] = {}
     for name in models:

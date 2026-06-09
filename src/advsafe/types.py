@@ -30,7 +30,9 @@ class ModelConfig:
     name: str  # short id, e.g. "llama-3.1-8b"
     hf_id: str  # HuggingFace repo, e.g. "meta-llama/Llama-3.1-8B-Instruct"
     revision: str | None = None  # pinned commit sha, recommended for reproducibility
-    family: str = "llama"  # "llama" | "qwen" | "gemma" | "deepseek" — used for chat template selection
+    family: str = (
+        "llama"  # "llama" | "qwen" | "gemma" | "deepseek" — used for chat template selection
+    )
     params_billion: float = 0.0
     use_quantization: bool = False  # 4-bit QLoRA via bitsandbytes
     use_flash_attn: bool = False

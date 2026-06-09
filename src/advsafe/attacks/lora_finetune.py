@@ -21,7 +21,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from advsafe.attacks.base import AttackConfig, AttackPlugin, AttackType, register_attack
+from advsafe.attacks.base import AttackPlugin, AttackType, register_attack
 from advsafe.types import AttackResult, ModelHandle
 from advsafe.utils.logging import get_logger
 from advsafe.utils.seeds import set_global_seed
@@ -95,11 +95,14 @@ class HarmfulPairsDataset:
         )
         full_text = prompt_text + response + self.tokenizer.eos_token
 
-        prompt_ids = self.tokenizer(
-            prompt_text, add_special_tokens=False, return_tensors=None
-        )["input_ids"]
+        prompt_ids = self.tokenizer(prompt_text, add_special_tokens=False, return_tensors=None)[
+            "input_ids"
+        ]
         full_ids = self.tokenizer(
-            full_text, add_special_tokens=False, return_tensors=None, truncation=True,
+            full_text,
+            add_special_tokens=False,
+            return_tensors=None,
+            truncation=True,
             max_length=self.max_seq_len,
         )["input_ids"]
 

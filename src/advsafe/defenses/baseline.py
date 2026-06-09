@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from advsafe.defenses.base import DefenseConfig, DefensePlugin, register_defense
+from advsafe.defenses.base import DefensePlugin, register_defense
 
 
 @register_defense("baseline")

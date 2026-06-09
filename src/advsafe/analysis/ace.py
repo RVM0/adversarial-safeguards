@@ -51,9 +51,8 @@ as full fine-tuning, not just adapter-sized.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
-
 
 # ---------------------------------------------------------------------------
 # FLOPs accounting
@@ -306,10 +305,8 @@ def conditional_ace(
         defended_asr: Measured ASR of the attacked model under the defense.
     """
     net_harm = max(0.0, attack_asr - defended_asr)
-    if net_harm <= 0:
-        effective_ace = float("inf")  # defender perfectly catches; attack worthless
-    else:
-        effective_ace = ace_raw.ace - math.log10(net_harm)
+    # net_harm <= 0 → defender perfectly catches; the attack is economically worthless.
+    effective_ace = float("inf") if net_harm <= 0 else ace_raw.ace - math.log10(net_harm)
     return ConditionalACEResult(
         ace_raw=ace_raw.ace,
         attack_asr=attack_asr,

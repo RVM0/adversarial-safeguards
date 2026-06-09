@@ -25,10 +25,25 @@ class LlamaGuardInputDefense(DefensePlugin):
     def __init__(self, config: DefenseConfig) -> None:
         super().__init__(config)
         self._classifier: LlamaGuardClassifier | None = None
-        self._block_categories: set[str] = set(config.block_categories or [
-            "S1", "S2", "S3", "S4", "S5", "S6", "S7",
-            "S8", "S9", "S10", "S11", "S12", "S13", "S14",
-        ])
+        self._block_categories: set[str] = set(
+            config.block_categories
+            or [
+                "S1",
+                "S2",
+                "S3",
+                "S4",
+                "S5",
+                "S6",
+                "S7",
+                "S8",
+                "S9",
+                "S10",
+                "S11",
+                "S12",
+                "S13",
+                "S14",
+            ]
+        )
 
     def setup(self) -> None:
         if self._classifier is None:

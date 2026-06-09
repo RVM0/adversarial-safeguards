@@ -14,9 +14,7 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 _HAS_TORCH = importlib.util.find_spec("torch") is not None
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: list[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Auto-skip tests marked `ml_stack` when torch is not importable.
 
     The pure-Python core (analysis, configs, registries, types) runs anywhere.

@@ -11,9 +11,7 @@ Status: scaffolded. Full MMLU implementation deferred to follow-up work.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from advsafe.evals.base import EvalConfig, EvalPlugin, register_eval
+from advsafe.evals.base import EvalPlugin, register_eval
 from advsafe.judges.base import JudgePlugin
 from advsafe.types import EvalPrompt, EvalScore, GeneratedResponse
 

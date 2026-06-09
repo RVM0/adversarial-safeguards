@@ -32,8 +32,14 @@ class PowerResult:
 def _z_alpha(alpha: float, two_sided: bool = True) -> float:
     """Critical Z value for a given alpha. Approximation; for α in [0.001, 0.10]."""
     one_sided = {
-        0.10: 1.282, 0.05: 1.645, 0.025: 1.960, 0.0125: 2.241,
-        0.01: 2.326, 0.0083: 2.394, 0.005: 2.576, 0.001: 3.090,
+        0.10: 1.282,
+        0.05: 1.645,
+        0.025: 1.960,
+        0.0125: 2.241,
+        0.01: 2.326,
+        0.0083: 2.394,
+        0.005: 2.576,
+        0.001: 3.090,
     }
     eff_alpha = alpha / 2 if two_sided else alpha
     nearest = min(one_sided.keys(), key=lambda a: abs(a - eff_alpha))
@@ -63,7 +69,10 @@ def power_for_proportion(
     mde = min_p1 - p0
     return PowerResult(
         hypothesis=hypothesis_name,
-        n=n, alpha=alpha, beta=beta, null_value=p0,
+        n=n,
+        alpha=alpha,
+        beta=beta,
+        null_value=p0,
         minimum_detectable_effect=mde,
         interpretation=(
             f"At n={n}, α={alpha}, power={1-beta:.0%}: detectable if true "
@@ -73,7 +82,8 @@ def power_for_proportion(
 
 
 def power_for_two_proportions(
-    n1: int, n2: int | None = None,
+    n1: int,
+    n2: int | None = None,
     baseline_p: float = 0.5,
     alpha: float = 0.0083,
     beta: float = 0.20,
@@ -88,7 +98,10 @@ def power_for_two_proportions(
     mde = (z_a + z_b) * se_null
     return PowerResult(
         hypothesis=hypothesis_name,
-        n=n1 + n2, alpha=alpha, beta=beta, null_value=0.0,
+        n=n1 + n2,
+        alpha=alpha,
+        beta=beta,
+        null_value=0.0,
         minimum_detectable_effect=mde,
         interpretation=(
             f"At n₁={n1}, n₂={n2}, α={alpha}, power={1-beta:.0%}: "
@@ -98,7 +111,9 @@ def power_for_two_proportions(
 
 
 def power_for_correlation(
-    n: int, alpha: float = 0.0083, beta: float = 0.20,
+    n: int,
+    alpha: float = 0.0083,
+    beta: float = 0.20,
     hypothesis_name: str = "Cohen's kappa difference",
 ) -> PowerResult:
     """Minimum detectable correlation/agreement via Fisher's z-transform."""
@@ -109,11 +124,12 @@ def power_for_correlation(
     mde_r = math.tanh(mde_z)
     return PowerResult(
         hypothesis=hypothesis_name,
-        n=n, alpha=alpha, beta=beta, null_value=0.0,
+        n=n,
+        alpha=alpha,
+        beta=beta,
+        null_value=0.0,
         minimum_detectable_effect=mde_r,
-        interpretation=(
-            f"At n={n}, α={alpha}, power={1-beta:.0%}: detectable κ ≥ {mde_r:.3f}."
-        ),
+        interpretation=(f"At n={n}, α={alpha}, power={1-beta:.0%}: detectable κ ≥ {mde_r:.3f}."),
     )
 
 
@@ -121,23 +137,38 @@ def prereg_power_table() -> list[PowerResult]:
     """Power analysis for H1-H6 at the actual sample sizes we'll use."""
     return [
         power_for_proportion(
-            n=240, null_value=0.50, alpha=0.0083, beta=0.20,
+            n=240,
+            null_value=0.50,
+            alpha=0.0083,
+            beta=0.20,
             hypothesis_name="H1: ASR > 50% on HarmBench (per cell)",
         ),
         power_for_two_proportions(
-            n1=240, n2=240, baseline_p=0.5, alpha=0.0083, beta=0.20,
+            n1=240,
+            n2=240,
+            baseline_p=0.5,
+            alpha=0.0083,
+            beta=0.20,
             hypothesis_name="H2: defense reclamation (per model)",
         ),
         power_for_proportion(
-            n=240, null_value=0.5, alpha=0.0083, beta=0.20,
+            n=240,
+            null_value=0.5,
+            alpha=0.0083,
+            beta=0.20,
             hypothesis_name="H3: DeepSeek-R1 fragility > others",
         ),
         power_for_proportion(
-            n=240, null_value=0.33, alpha=0.0083, beta=0.20,
+            n=240,
+            null_value=0.33,
+            alpha=0.0083,
+            beta=0.20,
             hypothesis_name="H4: dominant defense share > 50%",
         ),
         power_for_correlation(
-            n=240, alpha=0.0083, beta=0.20,
+            n=240,
+            alpha=0.0083,
+            beta=0.20,
             hypothesis_name="H5: within-family κ - cross-family κ > 0.20",
         ),
     ]

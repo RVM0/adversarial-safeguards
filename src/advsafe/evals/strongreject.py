@@ -9,12 +9,11 @@ Reference:
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import numpy as np
 
-from advsafe.evals.base import EvalConfig, EvalPlugin, register_eval
+from advsafe.evals.base import EvalPlugin, register_eval
 from advsafe.judges.base import JudgePlugin
 from advsafe.types import EvalPrompt, EvalScore, GeneratedResponse
 from advsafe.utils.logging import get_logger
@@ -76,10 +75,12 @@ class StrongREJECTEval(EvalPlugin):
 
         # Bootstrap CI
         rng = np.random.default_rng(self.config.seed)
-        boots = np.array([
-            rng.choice(harmful, size=n, replace=True).mean()
-            for _ in range(self.config.bootstrap_iterations)
-        ])
+        boots = np.array(
+            [
+                rng.choice(harmful, size=n, replace=True).mean()
+                for _ in range(self.config.bootstrap_iterations)
+            ]
+        )
         alpha = (1 - self.config.confidence_level) / 2
 
         return (

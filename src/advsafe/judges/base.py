@@ -27,7 +27,7 @@ class JudgeConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "JudgeConfig":
+    def from_dict(cls, data: dict[str, Any]) -> JudgeConfig:
         """Build a JudgeConfig from a dict, routing unknown keys to `extra`."""
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in data.items() if k in known_fields}
@@ -57,7 +57,7 @@ class JudgePlugin(ABC):
 
     def setup(self) -> None:
         """Load weights / authenticate / etc. Called once before judging."""
-        return None
+        return
 
     def teardown(self) -> None:
         return None

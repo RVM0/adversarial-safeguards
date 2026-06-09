@@ -1,6 +1,6 @@
 """Model loading + registry."""
 
-from advsafe.models.loader import load_model, generate
+from advsafe.models.loader import generate, load_model
 from advsafe.models.registry import get_model_config, list_models, load_model_config
 
 __all__ = [

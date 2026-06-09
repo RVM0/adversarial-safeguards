@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 
@@ -71,9 +71,7 @@ def cohens_h(p1: float, p2: float) -> float:
     return float(phi1 - phi2)
 
 
-def cohens_kappa(
-    labels_a: Iterable[bool], labels_b: Iterable[bool]
-) -> float:
+def cohens_kappa(labels_a: Iterable[bool], labels_b: Iterable[bool]) -> float:
     """Cohen's kappa for two raters' binary judgments."""
     a = np.asarray(list(labels_a), dtype=int)
     b = np.asarray(list(labels_b), dtype=int)
@@ -94,9 +92,7 @@ def bonferroni(p_values: list[float], alpha: float = 0.05) -> tuple[float, list[
     return alpha_adj, [bool(p < alpha_adj) for p in p_values]
 
 
-def benjamini_hochberg(
-    p_values: list[float], q: float = 0.10
-) -> tuple[list[float], list[bool]]:
+def benjamini_hochberg(p_values: list[float], q: float = 0.10) -> tuple[list[float], list[bool]]:
     """Benjamini-Hochberg FDR correction.
 
     Returns (adjusted_p_values, rejections).

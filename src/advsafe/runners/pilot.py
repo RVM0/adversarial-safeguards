@@ -27,7 +27,9 @@ logger = get_logger(__name__)
 
 
 @click.command()
-@click.option("--config", "config_path", default="configs/experiments/pilot.yaml", show_default=True)
+@click.option(
+    "--config", "config_path", default="configs/experiments/pilot.yaml", show_default=True
+)
 @click.option("--output", "output_dir", default="results/pilot", show_default=True)
 def cli(config_path: str, output_dir: str) -> None:
     """Run the Week 2 pilot."""
@@ -46,7 +48,9 @@ def cli(config_path: str, output_dir: str) -> None:
     for cell_spec in cells:
         # Merge common + per-cell overrides
         cell = {**common, **cell_spec}
-        cell_id = cell.get("id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}")
+        cell_id = cell.get(
+            "id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}"
+        )
         cell["id"] = cell_id
         out = output_root / cell_id
 

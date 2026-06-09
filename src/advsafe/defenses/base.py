@@ -1,4 +1,4 @@
-"""Abstract base class for defenses + registry.
+"""Base class for defenses + registry.
 
 A *defense* is a deployment-time intervention that:
   - filters the prompt before it reaches the model (input filter), OR
@@ -10,7 +10,6 @@ Defenses do NOT change model weights; they wrap the inference pipeline.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -34,7 +33,7 @@ class DefenseConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DefenseConfig":
+    def from_dict(cls, data: dict[str, Any]) -> DefenseConfig:
         """Build a DefenseConfig from a dict, routing unknown keys to `extra`."""
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in data.items() if k in known_fields}
@@ -46,8 +45,11 @@ class DefenseConfig:
         return cls(**kwargs)
 
 
-class DefensePlugin(ABC):
-    """Abstract base for defenses.
+class DefensePlugin:
+    """Base class for defenses.
+
+    Concrete, not abstract: every method has a working identity default, so an
+    unsubclassed instance is a valid no-op defense (the D0 baseline).
 
     A defense may implement any subset of:
       - `filter_input(prompt) -> DefenseDecision`
@@ -79,11 +81,11 @@ class DefensePlugin(ABC):
 
         Called by the runner before any filter_* calls. Default is no-op.
         """
-        return None
+        return
 
     def teardown(self) -> None:
         """One-time cleanup hook (e.g., free GPU memory). Default is no-op."""
-        return None
+        return
 
 
 # ----- Registry -------------------------------------------------------------

@@ -36,12 +36,11 @@ from __future__ import annotations
 
 import math
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Iterable
 
 import numpy as np
-
 
 # ============================================================================
 # 1. Safeguard Decay Function (SDF)
@@ -297,8 +296,7 @@ def defense_marginal_value(
         )
 
     solo_recl = [
-        max(0.0, (asr_baseline - asr_i) / asr_baseline)
-        for asr_i in asr_individual_defenses
+        max(0.0, (asr_baseline - asr_i) / asr_baseline) for asr_i in asr_individual_defenses
     ]
     full_recl = max(0.0, (asr_baseline - asr_combined) / asr_baseline)
     sum_solo = sum(solo_recl)
@@ -463,12 +461,18 @@ def cross_attack_transferability(
     n = len(success_a)
     if n == 0:
         return CATResult(
-            model_a=model_a, model_b=model_b,
-            cohens_kappa=float("nan"), lift=float("nan"),
-            p_success_a=0.0, p_success_b=0.0, p_joint=0.0,
+            model_a=model_a,
+            model_b=model_b,
+            cohens_kappa=float("nan"),
+            lift=float("nan"),
+            p_success_a=0.0,
+            p_success_b=0.0,
+            p_joint=0.0,
             n_prompts=0,
-            ci_kappa_low=float("nan"), ci_kappa_high=float("nan"),
-            ci_lift_low=float("nan"), ci_lift_high=float("nan"),
+            ci_kappa_low=float("nan"),
+            ci_kappa_high=float("nan"),
+            ci_lift_low=float("nan"),
+            ci_lift_high=float("nan"),
         )
 
     a = np.asarray(success_a, dtype=int)
@@ -485,11 +489,8 @@ def cross_attack_transferability(
     else:
         kappa = (p_observed_agree - p_expected_agree) / (1 - p_expected_agree)
 
-    if not p_a > 0:
-        lift = float("nan")
-    else:
-        # Conditional: P(B=1 | A=1) = p_joint / p_a; lift = that / p_b
-        lift = (p_joint / p_a) / p_b if p_b > 0 else float("nan")
+    # Lift = P(B=1 | A=1) / P(B=1) = (p_joint / p_a) / p_b; nan if either base rate is 0.
+    lift = (p_joint / p_a / p_b) if (p_a > 0 and p_b > 0) else float("nan")
 
     # Bootstrap
     rng = np.random.default_rng(seed)
@@ -511,13 +512,9 @@ def cross_attack_transferability(
 
     alpha = (1 - confidence_level) / 2
     ci_kappa_low = float(np.quantile(kappa_samples, alpha)) if kappa_samples else float("nan")
-    ci_kappa_high = (
-        float(np.quantile(kappa_samples, 1 - alpha)) if kappa_samples else float("nan")
-    )
+    ci_kappa_high = float(np.quantile(kappa_samples, 1 - alpha)) if kappa_samples else float("nan")
     ci_lift_low = float(np.quantile(lift_samples, alpha)) if lift_samples else float("nan")
-    ci_lift_high = (
-        float(np.quantile(lift_samples, 1 - alpha)) if lift_samples else float("nan")
-    )
+    ci_lift_high = float(np.quantile(lift_samples, 1 - alpha)) if lift_samples else float("nan")
 
     return CATResult(
         model_a=model_a,
@@ -601,8 +598,12 @@ def transferability_matrix(
             if m_a == m_b:
                 continue
             cat = cross_attack_transferability(
-                m_a, m_b, success_by_model[m_a], success_by_model[m_b],
-                iterations=iterations, confidence_level=confidence_level,
+                m_a,
+                m_b,
+                success_by_model[m_a],
+                success_by_model[m_b],
+                iterations=iterations,
+                confidence_level=confidence_level,
                 seed=seed + i,
             )
             pairwise[(m_a, m_b)] = cat

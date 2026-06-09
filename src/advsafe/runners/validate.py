@@ -22,10 +22,14 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from advsafe.attacks.base import autoload as autoload_attacks, list_attacks
-from advsafe.defenses.base import autoload as autoload_defenses, list_defenses
-from advsafe.evals.base import autoload as autoload_evals, list_evals
-from advsafe.judges.base import autoload as autoload_judges, list_judges
+from advsafe.attacks.base import autoload as autoload_attacks
+from advsafe.attacks.base import list_attacks
+from advsafe.defenses.base import autoload as autoload_defenses
+from advsafe.defenses.base import list_defenses
+from advsafe.evals.base import autoload as autoload_evals
+from advsafe.evals.base import list_evals
+from advsafe.judges.base import autoload as autoload_judges
+from advsafe.judges.base import list_judges
 
 console = Console()
 
@@ -61,9 +65,7 @@ def _check_plugin(
     return []
 
 
-def _check_file_exists(
-    file_path: str | None, ref_path: str, field: str
-) -> list[ValidationIssue]:
+def _check_file_exists(file_path: str | None, ref_path: str, field: str) -> list[ValidationIssue]:
     if file_path and not Path(file_path).exists():
         return [
             ValidationIssue(
@@ -81,18 +83,22 @@ def validate_model_config(path: Path) -> list[ValidationIssue]:
     with path.open() as f:
         data = yaml.safe_load(f)
     issues += _check_required(data, ["name", "hf_id", "family"], str(path))
-    if "family" in data:
-        if data["family"].lower() not in {
-            "llama", "qwen", "gemma", "deepseek", "mistral", "phi"
-        }:
-            issues.append(
-                ValidationIssue(
-                    "warning",
-                    str(path),
-                    "family",
-                    f"unfamiliar family '{data['family']}'; chat template may not work",
-                )
+    if "family" in data and data["family"].lower() not in {
+        "llama",
+        "qwen",
+        "gemma",
+        "deepseek",
+        "mistral",
+        "phi",
+    }:
+        issues.append(
+            ValidationIssue(
+                "warning",
+                str(path),
+                "family",
+                f"unfamiliar family '{data['family']}'; chat template may not work",
             )
+        )
     if data.get("use_quantization") and data.get("params_billion", 0) < 5:
         issues.append(
             ValidationIssue(
@@ -114,18 +120,15 @@ def validate_attack_config(
     issues += _check_required(data, ["plugin"], str(path))
     if "plugin" in data:
         issues += _check_plugin(data["plugin"], valid_attacks, str(path))
-    if data.get("plugin") == "lora-finetune":
-        if data.get("n_examples") and data["n_examples"] > 0:
-            if strict and "dataset_path" in data:
-                issues += _check_file_exists(data["dataset_path"], str(path), "dataset_path")
-            if not 0 < data.get("learning_rate", 2e-4) < 1:
-                issues.append(
-                    ValidationIssue("error", str(path), "learning_rate", "must be 0 < lr < 1")
-                )
-            if data.get("lora_rank", 16) < 1:
-                issues.append(
-                    ValidationIssue("error", str(path), "lora_rank", "must be >= 1")
-                )
+    if data.get("plugin") == "lora-finetune" and data.get("n_examples") and data["n_examples"] > 0:
+        if strict and "dataset_path" in data:
+            issues += _check_file_exists(data["dataset_path"], str(path), "dataset_path")
+        if not 0 < data.get("learning_rate", 2e-4) < 1:
+            issues.append(
+                ValidationIssue("error", str(path), "learning_rate", "must be 0 < lr < 1")
+            )
+        if data.get("lora_rank", 16) < 1:
+            issues.append(ValidationIssue("error", str(path), "lora_rank", "must be >= 1"))
     return issues
 
 
@@ -139,15 +142,11 @@ def validate_defense_config(
     if "plugin" in data:
         issues += _check_plugin(data["plugin"], valid_defenses, str(path))
     if strict and data.get("system_prompt_path"):
-        issues += _check_file_exists(
-            data["system_prompt_path"], str(path), "system_prompt_path"
-        )
+        issues += _check_file_exists(data["system_prompt_path"], str(path), "system_prompt_path")
     return issues
 
 
-def validate_eval_config(
-    path: Path, valid_evals: set[str], strict: bool
-) -> list[ValidationIssue]:
+def validate_eval_config(path: Path, valid_evals: set[str], strict: bool) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     with path.open() as f:
         data = yaml.safe_load(f)
@@ -187,11 +186,14 @@ def validate_experiment_config(
         elif model not in valid_models:
             issues.append(
                 ValidationIssue(
-                    "error", ref, "model", f"unknown model '{model}'; available: {sorted(valid_models)}"
+                    "error",
+                    ref,
+                    "model",
+                    f"unknown model '{model}'; available: {sorted(valid_models)}",
                 )
             )
 
-        for sub, valid_set, label in [
+        for sub, valid_set, _label in [
             ("attack", valid_attacks, "attack"),
             ("defense", valid_defenses, "defense"),
             ("eval", valid_evals, "eval"),
@@ -216,10 +218,19 @@ def validate_experiment_config(
     show_default=True,
     type=click.Path(exists=True, file_okay=False),
 )
-@click.option("--strict/--no-strict", default=False, show_default=True,
-              help="Also require dataset files to exist")
-@click.option("--experiment", "experiment_path", default=None,
-              type=click.Path(), help="Validate a single experiment file")
+@click.option(
+    "--strict/--no-strict",
+    default=False,
+    show_default=True,
+    help="Also require dataset files to exist",
+)
+@click.option(
+    "--experiment",
+    "experiment_path",
+    default=None,
+    type=click.Path(),
+    help="Validate a single experiment file",
+)
 def cli(configs_dir: str, strict: bool, experiment_path: str | None) -> None:
     """Validate all YAML configs against the framework's expectations."""
     # Load all plugin registries

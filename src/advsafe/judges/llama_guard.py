@@ -112,9 +112,9 @@ class LlamaGuardClassifier:
             self.setup()
         assert self.model is not None and self.tokenizer is not None
 
-        input_ids = self.tokenizer.apply_chat_template(
-            messages, return_tensors="pt"
-        ).to(self.device)
+        input_ids = self.tokenizer.apply_chat_template(messages, return_tensors="pt").to(
+            self.device
+        )
 
         with torch.inference_mode():
             output = self.model.generate(

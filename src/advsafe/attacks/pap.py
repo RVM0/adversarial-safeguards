@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from advsafe.attacks.base import AttackConfig, AttackPlugin, AttackType, register_attack
+from advsafe.attacks.base import AttackPlugin, AttackType, register_attack
 from advsafe.types import AttackResult, ModelHandle
 from advsafe.utils.logging import get_logger
 
@@ -43,9 +43,7 @@ class PAPAttack(AttackPlugin):
         # Identify the chosen strategy
         strategy_id = cfg.template_id or "logical_appeal"
         template_path = (
-            Path(cfg.template_path)
-            if cfg.template_path
-            else Path("data/pap_templates.json")
+            Path(cfg.template_path) if cfg.template_path else Path("data/pap_templates.json")
         )
 
         if not template_path.exists():

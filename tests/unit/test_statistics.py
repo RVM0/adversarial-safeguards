@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 
 def test_bootstrap_proportion_recovers_mean():
     from advsafe.analysis.statistics import bootstrap_proportion

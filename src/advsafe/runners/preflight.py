@@ -36,7 +36,10 @@ class Check:
 
 
 def check_python_version() -> Check:
-    if sys.version_info < (3, 10):
+    # Runtime guard: the package can be run from source on an unsupported
+    # interpreter even though requires-python is >=3.10. ruff's UP036 judges this
+    # statically against the configured target version, so silence it here.
+    if sys.version_info < (3, 10):  # noqa: UP036
         return Check("Python ≥ 3.10", "fail", f"found {sys.version.split()[0]}")
     return Check("Python ≥ 3.10", "pass", sys.version.split()[0])
 
@@ -55,7 +58,7 @@ def check_imports() -> list[Check]:
         ("numpy", "1.26"),
         ("scipy", None),
     ]
-    for pkg, min_ver in required:
+    for pkg, _min_ver in required:
         try:
             mod = importlib.import_module(pkg.replace("-", "_"))
             version = getattr(mod, "__version__", "?")
@@ -76,9 +79,7 @@ def check_device() -> Check:
             return Check("GPU available", "pass", f"{n}× {name} ({mem:.0f} GB)")
         if torch.backends.mps.is_available():
             return Check("GPU available", "pass", "Apple MPS (unified memory)")
-        return Check(
-            "GPU available", "warn", "CPU only — pilot will work but sweep needs CUDA"
-        )
+        return Check("GPU available", "warn", "CPU only — pilot will work but sweep needs CUDA")
     except Exception as e:  # noqa: BLE001
         return Check("GPU available", "fail", str(e))
 
@@ -87,8 +88,7 @@ def check_hf_token() -> Check:
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
     if not token:
         return Check(
-            "HF_TOKEN set", "fail",
-            "required for Llama/Gemma; export HF_TOKEN=<your-token>"
+            "HF_TOKEN set", "fail", "required for Llama/Gemma; export HF_TOKEN=<your-token>"
         )
     return Check("HF_TOKEN set", "pass", f"token len={len(token)}")
 
@@ -97,8 +97,7 @@ def check_openai_token() -> Check:
     if os.environ.get("OPENAI_API_KEY"):
         return Check("OPENAI_API_KEY set", "pass", "")
     return Check(
-        "OPENAI_API_KEY set", "warn",
-        "optional — used for the judge cross-validation step only"
+        "OPENAI_API_KEY set", "warn", "optional — used for the judge cross-validation step only"
     )
 
 
@@ -107,18 +106,23 @@ def check_disk_space(min_gb: float = 200) -> Check:
     free_gb = free / 1e9
     if free_gb < min_gb:
         return Check(
-            f"Disk free ≥ {min_gb} GB", "fail",
-            f"only {free_gb:.0f} GB free; need ~{min_gb} GB for all 5 model weights"
+            f"Disk free ≥ {min_gb} GB",
+            "fail",
+            f"only {free_gb:.0f} GB free; need ~{min_gb} GB for all 5 model weights",
         )
     return Check(f"Disk free ≥ {min_gb} GB", "pass", f"{free_gb:.0f} GB free")
 
 
 def check_configs_validate() -> Check:
     """Run the validator as a subroutine."""
-    from advsafe.attacks.base import autoload as autoload_attacks, list_attacks
-    from advsafe.defenses.base import autoload as autoload_defenses, list_defenses
-    from advsafe.evals.base import autoload as autoload_evals, list_evals
-    from advsafe.judges.base import autoload as autoload_judges, list_judges
+    from advsafe.attacks.base import autoload as autoload_attacks
+    from advsafe.attacks.base import list_attacks
+    from advsafe.defenses.base import autoload as autoload_defenses
+    from advsafe.defenses.base import list_defenses
+    from advsafe.evals.base import autoload as autoload_evals
+    from advsafe.evals.base import list_evals
+    from advsafe.judges.base import autoload as autoload_judges
+    from advsafe.judges.base import list_judges
     from advsafe.runners.validate import (
         validate_attack_config,
         validate_defense_config,
@@ -131,7 +135,12 @@ def check_configs_validate() -> Check:
     autoload_defenses()
     autoload_evals()
     autoload_judges()
-    va, vd, ve, vj = set(list_attacks()), set(list_defenses()), set(list_evals()), set(list_judges())
+    va, vd, ve, vj = (
+        set(list_attacks()),
+        set(list_defenses()),
+        set(list_evals()),
+        set(list_judges()),
+    )
     vm = {p.stem for p in Path("configs/models").glob("*.yaml")}
 
     issues = []
@@ -168,8 +177,9 @@ def check_datasets() -> list[Check]:
         p = Path(path)
         if not p.exists():
             checks.append(
-                Check(f"Dataset: {name}", "fail",
-                      f"{path} missing — run scripts/download_datasets.sh")
+                Check(
+                    f"Dataset: {name}", "fail", f"{path} missing — run scripts/download_datasets.sh"
+                )
             )
         else:
             size_mb = p.stat().st_size / 1e6
@@ -198,10 +208,18 @@ def check_smoke_test() -> Check:
 
 
 @click.command()
-@click.option("--skip-smoke/--no-skip-smoke", default=False, show_default=True,
-              help="Skip the model-load smoke test (faster)")
-@click.option("--skip-models/--no-skip-models", default=True, show_default=True,
-              help="Skip HF model access checks (default: skip; rely on smoke test)")
+@click.option(
+    "--skip-smoke/--no-skip-smoke",
+    default=False,
+    show_default=True,
+    help="Skip the model-load smoke test (faster)",
+)
+@click.option(
+    "--skip-models/--no-skip-models",
+    default=True,
+    show_default=True,
+    help="Skip HF model access checks (default: skip; rely on smoke test)",
+)
 @click.option("--min-disk-gb", default=200, show_default=True)
 def cli(skip_smoke: bool, skip_models: bool, min_disk_gb: float) -> None:
     """Run all preflight checks."""

@@ -31,10 +31,14 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from advsafe.attacks.base import AttackConfig, autoload as autoload_attacks, get_attack
-from advsafe.defenses.base import DefenseConfig, autoload as autoload_defenses, get_defense
-from advsafe.evals.base import EvalConfig, autoload as autoload_evals, get_eval
-from advsafe.judges.base import JudgeConfig, autoload as autoload_judges, get_judge
+from advsafe.attacks.base import AttackConfig, get_attack
+from advsafe.attacks.base import autoload as autoload_attacks
+from advsafe.defenses.base import DefenseConfig, get_defense
+from advsafe.defenses.base import autoload as autoload_defenses
+from advsafe.evals.base import EvalConfig, get_eval
+from advsafe.evals.base import autoload as autoload_evals
+from advsafe.judges.base import JudgeConfig, get_judge
+from advsafe.judges.base import autoload as autoload_judges
 from advsafe.models import generate, get_model_config, load_model
 from advsafe.types import GenerationConfig, ModelHandle
 from advsafe.utils.device import describe_device
@@ -179,7 +183,9 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
                     metadata={"defense_action": "input_blocked"},
                 )
             )
-            defense_decisions.append({"prompt_id": prompt_obj.id, "stage": "input", **asdict(input_decision)})
+            defense_decisions.append(
+                {"prompt_id": prompt_obj.id, "stage": "input", **asdict(input_decision)}
+            )
             skipped += 1
             continue
 
@@ -252,7 +258,9 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
         "attack": {
             "name": attack_cfg.name,
             "type": attack_result.attack_type,
-            "checkpoint_path": str(attack_result.checkpoint_path) if attack_result.checkpoint_path else None,
+            "checkpoint_path": str(attack_result.checkpoint_path)
+            if attack_result.checkpoint_path
+            else None,
             "metadata": attack_result.metadata,
         },
         "defense": {"name": defense_cfg.name},
@@ -282,7 +290,9 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
 
 @click.command()
 @click.option("--experiment", "experiment_path", required=True, type=click.Path(exists=True))
-@click.option("--output", "output_dir", default=None, help="Output directory (defaults to results/<id>/)")
+@click.option(
+    "--output", "output_dir", default=None, help="Output directory (defaults to results/<id>/)"
+)
 def cli(experiment_path: str, output_dir: str | None) -> None:
     """Run a single experiment cell from a YAML config."""
     setup_logging("INFO")
@@ -302,8 +312,8 @@ def cli(experiment_path: str, output_dir: str | None) -> None:
     asr = manifest["score"].get("asr")
     lo = manifest["score"].get("asr_ci_low")
     hi = manifest["score"].get("asr_ci_high")
-    table.add_row("ASR", f"{asr:.3f}" if isinstance(asr, (int, float)) else "n/a")
-    if isinstance(lo, (int, float)) and isinstance(hi, (int, float)):
+    table.add_row("ASR", f"{asr:.3f}" if isinstance(asr, int | float) else "n/a")
+    if isinstance(lo, int | float) and isinstance(hi, int | float):
         table.add_row("CI", f"[{lo:.3f}, {hi:.3f}]")
     else:
         table.add_row("CI", "n/a")

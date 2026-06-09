@@ -32,7 +32,9 @@ logger = get_logger(__name__)
 
 
 @click.command()
-@click.option("--config", "config_path", default="configs/experiments/sweep.yaml", show_default=True)
+@click.option(
+    "--config", "config_path", default="configs/experiments/sweep.yaml", show_default=True
+)
 @click.option("--output", "output_dir", default="results/sweep", show_default=True)
 @click.option("--skip-existing/--no-skip-existing", default=True, show_default=True)
 @click.option("--dry-run", is_flag=True, help="Print the cells that would run and exit")
@@ -55,7 +57,9 @@ def cli(
     if dry_run:
         for cell_spec in cells:
             cell = {**common, **cell_spec}
-            cell_id = cell.get("id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}")
+            cell_id = cell.get(
+                "id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}"
+            )
             console.print(f"would run: {cell_id}")
         console.print(f"\nTotal cells: {len(cells)}")
         return
@@ -117,8 +121,7 @@ def cli(
         )
 
     console.print(
-        f"\n[green]Sweep complete.[/green] "
-        f"done={n_done} skipped={n_skipped} failed={n_failed}"
+        f"\n[green]Sweep complete.[/green] " f"done={n_done} skipped={n_skipped} failed={n_failed}"
     )
 
 

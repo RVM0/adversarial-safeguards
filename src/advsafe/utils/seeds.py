@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import random
 from dataclasses import dataclass
@@ -43,10 +44,8 @@ def set_global_seed(seed: int, deterministic: bool = True) -> None:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         # Newer PyTorch knob
-        try:
+        with contextlib.suppress(Exception):
             torch.use_deterministic_algorithms(True, warn_only=True)
-        except Exception:  # noqa: BLE001
-            pass
     else:
         torch.backends.cudnn.deterministic = False
         torch.backends.cudnn.benchmark = True
@@ -64,7 +63,7 @@ def capture_rng_state(seed: int) -> RngSnapshot:
     def _hash(state: object) -> str:
         if hasattr(state, "tobytes"):
             data = state.tobytes()  # type: ignore[union-attr]
-        elif isinstance(state, (bytes, bytearray)):
+        elif isinstance(state, bytes | bytearray):
             data = bytes(state)
         else:
             data = repr(state).encode()

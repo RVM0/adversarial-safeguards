@@ -32,7 +32,7 @@ class EvalConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "EvalConfig":
+    def from_dict(cls, data: dict[str, Any]) -> EvalConfig:
         """Build an EvalConfig from a dict, routing unknown keys to `extra`."""
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in data.items() if k in known_fields}
@@ -72,7 +72,7 @@ class EvalPlugin(ABC):
 
     def setup(self) -> None:
         """Optional setup hook called once before scoring."""
-        return None
+        return
 
 
 # ----- Registry -------------------------------------------------------------

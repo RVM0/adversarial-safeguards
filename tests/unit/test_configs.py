@@ -59,9 +59,9 @@ def test_model_configs_reference_real_families(configs_dir: Path):
     for path in _yaml_files(configs_dir, "models"):
         with path.open() as f:
             data = yaml.safe_load(f)
-        assert data["family"].lower() in supported_families, (
-            f"{path.name} family='{data['family']}' not in {supported_families}"
-        )
+        assert (
+            data["family"].lower() in supported_families
+        ), f"{path.name} family='{data['family']}' not in {supported_families}"
 
 
 @pytest.mark.ml_stack

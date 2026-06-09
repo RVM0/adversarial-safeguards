@@ -15,9 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import numpy as np
-
-from advsafe.evals.base import EvalConfig, EvalPlugin, register_eval
+from advsafe.evals.base import EvalPlugin, register_eval
 from advsafe.judges.base import JudgePlugin
 from advsafe.types import EvalPrompt, EvalScore, GeneratedResponse
 

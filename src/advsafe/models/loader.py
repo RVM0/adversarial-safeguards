@@ -70,8 +70,7 @@ def load_model(
     if quantize_4bit:
         if device.type != "cuda":
             raise RuntimeError(
-                "4-bit quantization requires CUDA (bitsandbytes). "
-                f"Current device: {device}"
+                "4-bit quantization requires CUDA (bitsandbytes). " f"Current device: {device}"
             )
         try:
             from transformers import BitsAndBytesConfig
@@ -254,5 +253,7 @@ def generate_batch(
     """
     results = []
     for pid, p in prompts:
-        results.append(generate(handle, p, gen_config=gen_config, system_prompt=system_prompt, prompt_id=pid))
+        results.append(
+            generate(handle, p, gen_config=gen_config, system_prompt=system_prompt, prompt_id=pid)
+        )
     return results

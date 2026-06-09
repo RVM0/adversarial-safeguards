@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from advsafe.evals.base import EvalConfig, EvalPlugin, register_eval
+from advsafe.evals.base import EvalPlugin, register_eval
 from advsafe.judges.base import JudgePlugin
 from advsafe.types import EvalPrompt, EvalScore, GeneratedResponse
 from advsafe.utils.logging import get_logger
@@ -135,7 +135,5 @@ class HarmBenchEval(EvalPlugin):
                     "n_output_tokens": r.n_output_tokens,
                 }
             )
-        (output_dir / "per_prompt.jsonl").write_text(
-            "\n".join(json.dumps(r) for r in records)
-        )
+        (output_dir / "per_prompt.jsonl").write_text("\n".join(json.dumps(r) for r in records))
         (output_dir / "score.json").write_text(json.dumps(score.__dict__, default=str, indent=2))

@@ -10,11 +10,8 @@ These metrics replaced an earlier draft (SHL/DC/RCVI) on critical review:
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
-
 
 # ============================================================================
 # Safeguard Decay Function (SDF)

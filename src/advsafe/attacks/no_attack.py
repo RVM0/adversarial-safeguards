@@ -6,7 +6,7 @@ overloading lora_finetune with n_examples=0; documents intent in the YAML.
 
 from __future__ import annotations
 
-from advsafe.attacks.base import AttackConfig, AttackPlugin, AttackType, register_attack
+from advsafe.attacks.base import AttackPlugin, AttackType, register_attack
 from advsafe.types import AttackResult, ModelHandle
 from advsafe.utils.logging import get_logger
 
