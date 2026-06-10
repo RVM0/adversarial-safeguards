@@ -139,7 +139,7 @@ cd paper && make
 - ☐ `paper/results/RESULTS.md` reads coherently
 - ☐ `paper/results/fig_pareto.png` looks like a reasonable curve
 - ☐ Hypothesis verdicts in `h1.json` / `h2.json` / `h3.json` make sense
-- ☐ Novel metric tables ($\SHL$, $\DC$) populated
+- ☐ Novel metric tables (ACE, SDF, DMV, CAT) populated
 - ☐ Updated `main.tex` with the results from `RESULTS.md`
 - ☐ `pdflatex` compiles `main.pdf` without errors
 

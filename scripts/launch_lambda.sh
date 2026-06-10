@@ -17,7 +17,15 @@ set -euo pipefail
 INSTANCE_TYPE="${INSTANCE_TYPE:-gpu_1x_a100_sxm4}"
 REGION="${REGION:-us-west-1}"
 
+# A100 capacity on Lambda is frequently exhausted in a given region. If the
+# launch below fails with a 4xx, check which regions currently have capacity:
+#   curl -s -u "$LAMBDA_API_KEY:" https://cloud.lambdalabs.com/api/v1/instance-types \
+#     | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; \
+#       [print(k, v.get('regions_with_capacity_available')) for k,v in d.items() if 'a100' in k]"
+# then re-run with e.g.  REGION=us-east-1 bash scripts/launch_lambda.sh
 echo "[lambda] Launching $INSTANCE_TYPE in $REGION..."
+echo "[lambda] (if this 4xx-fails, A100 capacity is likely out in $REGION — see the"
+echo "[lambda]  availability check in this script's comments, then retry another REGION)"
 
 LAUNCH_RESPONSE=$(curl -fsSL \
     -X POST \
@@ -52,16 +60,18 @@ echo "[lambda] Instance active at $IP"
 echo ""
 echo "[lambda] To start the sweep:"
 echo "    ssh ubuntu@$IP"
-echo "    git clone <your-repo-url> advsafe"
+echo "    git clone https://github.com/RVM0/adversarial-safeguards.git advsafe"
 echo "    cd advsafe"
-echo "    export HF_TOKEN=$HF_TOKEN"
+echo "    export HF_TOKEN=<your-hf-token>          # required (gated models)"
+echo "    export OPENAI_API_KEY=<your-openai-key>  # required for D1/D2/D4 judge cells"
 echo "    bash scripts/setup_env.sh"
 echo "    bash scripts/download_models.sh"
 echo "    bash scripts/download_datasets.sh"
+echo "    advsafe-preflight                        # verify before the long run"
 echo "    nohup advsafe-sweep --config configs/experiments/sweep.yaml > sweep.log 2>&1 &"
 echo ""
 echo "[lambda] To tear down (IMPORTANT — billing continues until then):"
-echo "    curl -X POST -u $LAMBDA_API_KEY: \\"
+echo "    curl -X POST -u \$LAMBDA_API_KEY: \\"
 echo "         -H 'Content-Type: application/json' \\"
 echo "         -d '{\"instance_ids\":[\"$INSTANCE_ID\"]}' \\"
 echo "         https://cloud.lambdalabs.com/api/v1/instance-operations/terminate"

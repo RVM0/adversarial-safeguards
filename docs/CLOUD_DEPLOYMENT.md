@@ -50,12 +50,13 @@ The script prints SSH instructions and the instance ID when ready.
 ssh ubuntu@<instance-ip>
 
 # on the instance:
-git clone <your-repo-url> advsafe
+git clone https://github.com/RVM0/adversarial-safeguards.git advsafe
 cd advsafe
-export HF_TOKEN=<your-hf-token>
+export HF_TOKEN=<your-hf-token>          # required (gated models)
+export OPENAI_API_KEY=<your-openai-key>  # required: D1/D2/D4 cells judge with GPT-4o-mini
 
 bash scripts/setup_env.sh
-bash scripts/download_models.sh         # ~30 min, 150 GB of weights
+bash scripts/download_models.sh         # ~30 min, ~180 GB of weights (4 panel + Llama Guard)
 bash scripts/download_datasets.sh
 
 # Background the sweep so it survives SSH disconnects
@@ -161,8 +162,9 @@ is the cleanest backup. Workflow is nearly identical:
 # - Volume: 200 GB
 
 # Then on the pod:
-git clone <repo-url> advsafe && cd advsafe
+git clone https://github.com/RVM0/adversarial-safeguards.git advsafe && cd advsafe
 export HF_TOKEN=<token>
+export OPENAI_API_KEY=<your-openai-key>   # required for D1/D2/D4 judge cells
 bash scripts/setup_env.sh
 bash scripts/download_models.sh
 bash scripts/download_datasets.sh
@@ -193,18 +195,23 @@ After the sweep:
 
 ## Roadmap: 2-3 day cloud sweep
 
-This sweep is **designed** to fit in 2-3 days on a single A100 80GB:
+This sweep is **120 cells** (4 models × 6 attacks × 5 defenses) plus 12 LoRA
+fine-tunes. It fits in ~3 days on a single A100 80GB, or ~1 day on 4× A100 with
+smart release. See [TIMELINES.md](TIMELINES.md) for the authoritative
+per-platform breakdown; the 1× A100 summary:
 
 | Phase | Hours | Note |
 |---|---|---|
 | Setup + downloads | 1-2 | one-time |
-| Training (12 LoRA fine-tunes) | ~30-40 | 4 models × 3 attack-budget levels |
-| Inference (400 cells) | ~20-30 | 4 models × 5 attacks × 5 defenses × 1 eval |
-| Judge passes | included in inference | Llama Guard 3 loaded once |
-| **Total** | **~50-72 hrs** | **= 2-3 days** |
+| Training (12 LoRA fine-tunes) | ~6 | 4 models × 3 attack budgets; 27B/32B QLoRA dominate |
+| Inference (120 cells) | ~51 | 4 models × 6 attacks × 5 defenses |
+| Judging (Llama Guard 3 + GPT-4o-mini) | ~12 | partly overlaps inference |
+| **Total** | **~70-80 hrs** | **≈ 3 days on 1× A100** |
 | Buffer for debugging | +5-10 | recommended |
 
-Budget: ~$77 on Lambda Labs, ~$48 on RunPod community, ~$978 on AWS g5.48xlarge.
+Budget (see TIMELINES.md for derivations): **~$72–97 on Lambda Labs**
+(4× smart-release ~$72 vs 1× sequential ~$97), ~$48–70 on RunPod community,
+~$978 on AWS g5.48xlarge.
 
-If you need to compress to 1 day: rent 4× A100 in parallel (~$310 on Lambda)
-and modify `advsafe-sweep` to shard cells across GPUs.
+To compress to ~1 day, rent 4× A100 and pin one model per GPU (smart-release
+the 8B/14B GPUs when they finish ≈ ~$72; see TIMELINES.md §"4× A100").
