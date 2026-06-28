@@ -40,11 +40,26 @@ class ModelConfig:
     max_seq_len: int = 4096
     eos_token_ids: list[int] = field(default_factory=list)
     notes: str = ""
+    # Compute backend:
+    #   "hf"  — torch + transformers + bitsandbytes (CUDA path; needs torch wheels)
+    #   "mlx" — Apple-Silicon MLX, torch-free; the only local path on a box without
+    #           torch wheels (e.g. Python 3.14) and the way 27B/32B fit on the laptop.
+    backend: str = "hf"
+    # Optional pre-quantized MLX repo (e.g. "mlx-community/Qwen3-32B-4bit"). When the
+    # backend is "mlx" and this is set, the loader pulls this instead of hf_id, skipping
+    # an on-device conversion. Falls back to hf_id (converted on the fly) when null.
+    mlx_id: str | None = None
 
 
 @dataclass
 class ModelHandle:
-    """Loaded model + tokenizer + config, ready for inference or training."""
+    """Loaded model + tokenizer + config, ready for inference or training.
+
+    The ``model``/``tokenizer`` slots are duck-typed: for ``backend == "hf"`` they
+    hold HF objects (typed below); for ``backend == "mlx"`` they hold the MLX module
+    and ``mlx_lm`` tokenizer wrapper. Annotations are lazy (``from __future__ import
+    annotations``) so this module imports without torch — required on the MLX-only box.
+    """
 
     model: PreTrainedModel
     tokenizer: PreTrainedTokenizerBase
@@ -52,6 +67,7 @@ class ModelHandle:
     device: torch.device
     dtype: torch.dtype
     revision_sha: str  # actual loaded revision, recorded in manifest
+    backend: str = "hf"  # "hf" | "mlx" — selects the generate/train code path
 
 
 # ----- Generation config ----------------------------------------------------

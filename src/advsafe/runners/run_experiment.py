@@ -61,13 +61,46 @@ def _hash_file(path: Path) -> str:
 
 
 def _load_lora_adapter(model: ModelHandle, adapter_path: Path) -> ModelHandle:
-    """Load a saved LoRA adapter into the base model."""
+    """Load a saved LoRA adapter onto the base model.
+
+    MLX applies the adapter at load time, so we reload the model with the adapter
+    rather than wrapping it (torch-free). The HF path wraps with PEFT.
+    """
+    if getattr(model, "backend", "hf") == "mlx":
+        from advsafe.models.mlx_backend import load_model_mlx
+
+        return load_model_mlx(model.config, adapter_path=str(adapter_path))
+
     from peft import PeftModel
 
     peft_model = PeftModel.from_pretrained(model.model, str(adapter_path))
     peft_model.eval()
     model.model = peft_model
     return model
+
+
+def _free_model(handle: ModelHandle) -> None:
+    """Drop the loaded weights and free device/unified memory.
+
+    Called before the judge loads so an 8B guard doesn't co-reside with a 32B 4-bit
+    target on a 64 GB laptop. Keeps handle.device/dtype/config for the manifest.
+    """
+    handle.model = None  # type: ignore[assignment]
+    if getattr(handle, "backend", "hf") == "mlx":
+        try:
+            import mlx.core as mx
+
+            mx.clear_cache()
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except ImportError:
+            pass
 
 
 def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, Any]:
@@ -100,8 +133,13 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
     rng_snapshot = capture_rng_state(seed)
 
     # --- Load model ---
+    # An experiment may force a compute backend for the whole cell (target model +
+    # guard judge/defense) — e.g. backend: mlx to run locally on Apple Silicon.
+    backend_override = experiment_config.get("backend")
     t0 = time.perf_counter()
     model_cfg = get_model_config(experiment_config["model"])
+    if backend_override:
+        model_cfg.backend = backend_override
     handle = load_model(model_cfg)
     t_model_load = time.perf_counter() - t0
     logger.info("Model loaded", extra={"seconds": t_model_load, "model": model_cfg.name})
@@ -124,6 +162,8 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
     # --- Setup defense ---
     defense_dict = dict(experiment_config["defense"])
     defense_dict["name"] = defense_dict.pop("plugin")
+    if backend_override:
+        defense_dict.setdefault("backend", backend_override)
     defense_cfg = DefenseConfig.from_dict(defense_dict)
     DefenseClass = get_defense(defense_cfg.name)
     defense = DefenseClass(defense_cfg)
@@ -132,6 +172,9 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
     # --- Setup judge ---
     judge_dict = dict(experiment_config["judge"])
     judge_dict["name"] = judge_dict.pop("plugin")
+    if backend_override:
+        # Local-model judges (Llama Guard) honour this; the OpenAI judge ignores it.
+        judge_dict.setdefault("backend", backend_override)
     judge_cfg = JudgeConfig.from_dict(judge_dict)
     JudgeClass = get_judge(judge_cfg.name)
     judge = JudgeClass(judge_cfg)
@@ -218,6 +261,10 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
         )
         responses.append(response)
 
+    # Free the target model before the judge runs — on a 64 GB laptop the 8B guard
+    # must not co-reside with a 32B 4-bit target. Scoring only needs `responses`.
+    _free_model(handle)
+
     # --- Score (returns both aggregate score and per-prompt verdicts) ---
     t0 = time.perf_counter()
     score, verdicts = eval_plugin.score(responses, judge)
@@ -293,11 +340,19 @@ def run_cell(experiment_config: dict[str, Any], output_dir: Path) -> dict[str, A
 @click.option(
     "--output", "output_dir", default=None, help="Output directory (defaults to results/<id>/)"
 )
-def cli(experiment_path: str, output_dir: str | None) -> None:
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Force a compute backend for the cell (e.g. mlx for local Apple Silicon)",
+)
+def cli(experiment_path: str, output_dir: str | None, backend: str | None) -> None:
     """Run a single experiment cell from a YAML config."""
     setup_logging("INFO")
     with Path(experiment_path).open() as f:
         config = yaml.safe_load(f)
+    if backend:
+        config["backend"] = backend
 
     exp_id = config.get("id", Path(experiment_path).stem)
     out = Path(output_dir or f"results/{exp_id}")

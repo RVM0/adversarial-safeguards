@@ -41,26 +41,23 @@ source .venv/bin/activate
 echo "[advsafe] Upgrading pip"
 pip install --upgrade pip
 
-# Install torch with the right backend
+# Install the right backend + the project. Apple Silicon uses the torch-free MLX
+# backend (the only local path, and the only one that installs on Python 3.14, which
+# has no torch wheels). CUDA/CPU hosts use the torch-based [hf]/[cuda] stack. torch is
+# NEVER installed on Darwin.
 if [ "$PLATFORM" = "Darwin" ]; then
-    echo "[advsafe] Installing torch (MPS / Apple Silicon)"
-    pip install torch==2.5.1
+    echo "[advsafe] Apple Silicon: installing the torch-free MLX backend (no torch)"
+    pip install -e ".[mlx,dev]"
 elif command -v nvidia-smi >/dev/null 2>&1; then
     CUDA_VER="$(nvidia-smi | grep -oP 'CUDA Version: \K[0-9.]+' | head -1 || echo "12.4")"
-    echo "[advsafe] CUDA detected ($CUDA_VER); installing CUDA-enabled torch"
+    echo "[advsafe] CUDA detected ($CUDA_VER); installing CUDA-enabled torch + advsafe[cuda]"
     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+    pip install -e ".[dev,cuda]"
 else
-    echo "[advsafe] No GPU detected; installing CPU torch"
+    echo "[advsafe] No GPU detected; installing CPU torch + advsafe[hf]"
     pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+    pip install -e ".[dev,hf]"
 fi
-
-# Install the project + dev deps
-echo "[advsafe] Installing advsafe + dev deps"
-EXTRAS="dev"
-if command -v nvidia-smi >/dev/null 2>&1; then
-    EXTRAS="dev,cuda"
-fi
-pip install -e ".[${EXTRAS}]"
 
 # OpenAI judge (optional)
 if [ -n "${OPENAI_API_KEY:-}" ]; then

@@ -157,6 +157,20 @@ class LoRAFineTuneAttack(AttackPlugin):
                 metadata={"note": "n_examples=0; no-attack control via lora-finetune"},
             )
 
+        # MLX backend: torch-free QLoRA training (the path that lets the laptop
+        # attack the 27B/32B models). Delegated wholesale; the PEFT/torch loop below
+        # is the CUDA path only.
+        if getattr(model, "backend", "hf") == "mlx":
+            from advsafe.models.mlx_backend import train_lora_mlx
+
+            adapter_path, manifest = train_lora_mlx(model, cfg)
+            return AttackResult(
+                attack_name=cfg.name,
+                attack_type="WEIGHT_MOD",
+                checkpoint_path=adapter_path,
+                metadata=manifest,
+            )
+
         import torch
         from peft import (
             LoraConfig,

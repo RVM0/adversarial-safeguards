@@ -17,17 +17,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from advsafe.judges.base import JudgeConfig, JudgePlugin, register_judge
 from advsafe.types import GeneratedResponse, JudgeVerdict
-from advsafe.utils.device import get_device, get_dtype
 from advsafe.utils.logging import get_logger
 
-if TYPE_CHECKING:
-    import torch
-
 logger = get_logger(__name__)
+
+# Default guard weights per backend. The MLX repo lets the guard run torch-free on
+# Apple Silicon; confirm the exact id exists on hf.co/mlx-community before a real run.
+DEFAULT_GUARD_HF_ID = "meta-llama/Llama-Guard-3-8B"
+DEFAULT_GUARD_MLX_ID = "mlx-community/Llama-Guard-3-8B-4bit"
 
 # Llama Guard 3 hazard categories (see model card).
 LLAMA_GUARD_CATEGORIES = {
@@ -66,67 +66,71 @@ class LlamaGuardClassifier:
 
     def __init__(
         self,
-        hf_id: str = "meta-llama/Llama-Guard-3-8B",
+        hf_id: str = DEFAULT_GUARD_HF_ID,
         revision: str | None = None,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
+        backend: str = "hf",
+        mlx_id: str | None = None,
     ) -> None:
         self.hf_id = hf_id
         self.revision = revision
-        self.device = device or get_device()
-        self.dtype = dtype or get_dtype(self.device)
-        self.model = None
-        self.tokenizer = None
+        self.backend = backend
+        self.mlx_id = mlx_id
+        # A backend-aware ModelHandle (None until setup). The guard loads/generates
+        # through advsafe.models.loader, so the MLX path is torch-free.
+        self.handle = None
 
     def setup(self) -> None:
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-
-        if self.model is not None:
+        if self.handle is not None:
             return
-        logger.info("Loading Llama Guard 3", extra={"hf_id": self.hf_id})
-        kwargs = {"torch_dtype": self.dtype}
-        if self.revision:
-            kwargs["revision"] = self.revision
-        if self.device.type == "cuda":
-            kwargs["device_map"] = "auto"
+        from advsafe.models.loader import load_model
+        from advsafe.types import ModelConfig
 
-        self.tokenizer = AutoTokenizer.from_pretrained(self.hf_id, revision=self.revision)
-        self.model = AutoModelForCausalLM.from_pretrained(self.hf_id, **kwargs)
-        if self.device.type != "cuda":
-            self.model = self.model.to(self.device)
-        self.model.eval()
+        logger.info("Loading Llama Guard 3", extra={"backend": self.backend, "hf_id": self.hf_id})
+        config = ModelConfig(
+            name="llama-guard-3",
+            hf_id=self.hf_id,
+            revision=self.revision,
+            family="llama",
+            backend=self.backend,
+            mlx_id=self.mlx_id or (DEFAULT_GUARD_MLX_ID if self.backend == "mlx" else None),
+        )
+        self.handle = load_model(config)
 
     def teardown(self) -> None:
-        import torch
+        handle = self.handle
+        self.handle = None
+        if handle is None:
+            return
+        if getattr(handle, "backend", "hf") == "mlx":
+            try:
+                import mlx.core as mx
 
-        self.model = None
-        self.tokenizer = None
-        if self.device.type == "cuda":
-            torch.cuda.empty_cache()
+                mx.clear_cache()
+            except Exception:  # noqa: BLE001
+                pass
+        else:
+            import torch
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def _run(self, messages: list[dict]) -> str:
         """Generate Llama Guard's classification text for a chat sequence."""
-        import torch
+        from advsafe.models.loader import generate_messages
+        from advsafe.types import GenerationConfig
 
-        if self.model is None or self.tokenizer is None:
+        if self.handle is None:
             self.setup()
-        assert self.model is not None and self.tokenizer is not None
 
-        input_ids = self.tokenizer.apply_chat_template(messages, return_tensors="pt").to(
-            self.device
+        # Llama Guard's chat template embeds the safety policy and the answer cue
+        # itself, so we do not add a separate generation prompt.
+        resp = generate_messages(
+            self.handle,
+            messages,
+            gen_config=GenerationConfig(max_new_tokens=64, temperature=0.0, do_sample=False),
+            add_generation_prompt=False,
         )
-
-        with torch.inference_mode():
-            output = self.model.generate(
-                input_ids=input_ids,
-                max_new_tokens=64,
-                pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
-                do_sample=False,
-                temperature=1.0,
-            )
-        prompt_len = input_ids.shape[-1]
-        decoded = self.tokenizer.decode(output[0, prompt_len:], skip_special_tokens=True)
-        return decoded.strip()
+        return resp.response.strip()
 
     @staticmethod
     def _parse(text: str) -> GuardClassification:
@@ -176,8 +180,10 @@ class LlamaGuardJudge(JudgePlugin):
     def __init__(self, config: JudgeConfig) -> None:
         super().__init__(config)
         self._classifier = LlamaGuardClassifier(
-            hf_id=config.hf_id or "meta-llama/Llama-Guard-3-8B",
+            hf_id=config.hf_id or DEFAULT_GUARD_HF_ID,
             revision=config.revision,
+            backend=config.backend,
+            mlx_id=config.mlx_id,
         )
 
     def setup(self) -> None:

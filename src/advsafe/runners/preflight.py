@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import os
 import shutil
 import sys
@@ -44,20 +45,27 @@ def check_python_version() -> Check:
     return Check("Python ≥ 3.10", "pass", sys.version.split()[0])
 
 
-def check_imports() -> list[Check]:
+def check_imports(backend: str = "mlx") -> list[Check]:
     checks = []
-    required = [
-        ("torch", "2.4"),
-        ("transformers", "4.40"),
-        ("peft", "0.10"),
-        ("accelerate", "1.0"),
-        ("datasets", "3.0"),
+    common = [
         ("yaml", None),
         ("click", None),
         ("rich", None),
         ("numpy", "1.26"),
         ("scipy", None),
     ]
+    if backend == "mlx":
+        # Apple-Silicon path: torch is NOT required (and won't install on Py3.14).
+        required = [("mlx", None), ("mlx_lm", None), ("transformers", "5.0"), *common]
+    else:
+        required = [
+            ("torch", "2.4"),
+            ("transformers", "4.40"),
+            ("peft", "0.10"),
+            ("accelerate", "1.0"),
+            ("datasets", "3.0"),
+            *common,
+        ]
     for pkg, _min_ver in required:
         try:
             mod = importlib.import_module(pkg.replace("-", "_"))
@@ -68,7 +76,19 @@ def check_imports() -> list[Check]:
     return checks
 
 
-def check_device() -> Check:
+def check_device(backend: str = "mlx") -> Check:
+    if backend == "mlx":
+        try:
+            from advsafe.models.mlx_backend import describe_device_mlx
+
+            info = describe_device_mlx()
+            mem = info.get("available_memory_gb")
+            detail = info["backend_version"]
+            if mem:
+                detail += f" — {mem:.0f} GB unified memory"
+            return Check("MLX device", "pass", detail)
+        except Exception as e:  # noqa: BLE001
+            return Check("MLX device", "fail", str(e))
     try:
         import torch
 
@@ -84,20 +104,35 @@ def check_device() -> Check:
         return Check("GPU available", "fail", str(e))
 
 
-def check_hf_token() -> Check:
+def check_hf_token(backend: str = "mlx") -> Check:
     token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
-    if not token:
-        return Check(
-            "HF_TOKEN set", "fail", "required for Llama/Gemma; export HF_TOKEN=<your-token>"
-        )
-    return Check("HF_TOKEN set", "pass", f"token len={len(token)}")
+    if token:
+        return Check("HF_TOKEN set", "pass", f"token len={len(token)}")
+    if backend == "mlx":
+        # mlx-community 4-bit repos are public; a token is only needed if you point at
+        # a gated original. So this is a caveat, not a hard failure, on the MLX path.
+        return Check("HF_TOKEN set", "warn", "optional for public mlx-community repos")
+    return Check("HF_TOKEN set", "fail", "required for Llama/Gemma; export HF_TOKEN=<your-token>")
 
 
-def check_openai_token() -> Check:
+def check_openai_judge() -> Check:
+    """Fail fast if any experiment config uses the OpenAI judge and no key is set.
+
+    Llama-Guard-defended cells route to gpt-4o-mini (avoids Guard judging Guard), so a
+    missing key would abort those cells mid-sweep.
+    """
+    uses_openai = any(
+        "openai-gpt-4o-mini" in p.read_text(errors="ignore")
+        for p in Path("configs/experiments").glob("*.yaml")
+    )
+    if not uses_openai:
+        return Check("OPENAI_API_KEY", "skip", "no experiment config uses the OpenAI judge")
     if os.environ.get("OPENAI_API_KEY"):
         return Check("OPENAI_API_KEY set", "pass", "")
     return Check(
-        "OPENAI_API_KEY set", "warn", "optional — used for the judge cross-validation step only"
+        "OPENAI_API_KEY set",
+        "fail",
+        "required: Llama-Guard-defended cells judge with gpt-4o-mini (network)",
     )
 
 
@@ -181,13 +216,37 @@ def check_datasets() -> list[Check]:
                     f"Dataset: {name}", "fail", f"{path} missing — run scripts/download_datasets.sh"
                 )
             )
+        elif name == "Attack train data" and _is_stub_corpus(p):
+            # B3: never let an attack cell train on the placeholder corpus.
+            checks.append(
+                Check(
+                    f"Dataset: {name}",
+                    "fail",
+                    "STUB/placeholder — replace before any A1 attack cell (n_examples>0)",
+                )
+            )
         else:
             size_mb = p.stat().st_size / 1e6
             checks.append(Check(f"Dataset: {name}", "pass", f"{size_mb:.1f} MB"))
     return checks
 
 
-def check_smoke_test() -> Check:
+# Sentinel written by scripts/download_datasets.sh into the placeholder attack corpus.
+_STUB_SENTINEL = "[STUB"
+
+
+def _is_stub_corpus(path: Path) -> bool:
+    """True if the attack corpus is the shipped placeholder (sentinel or too few rows)."""
+    try:
+        text = path.read_text(errors="ignore")
+    except OSError:
+        return False
+    if _STUB_SENTINEL in text:
+        return True
+    return len([ln for ln in text.splitlines() if ln.strip()]) < 10
+
+
+def check_smoke_test(backend: str = "mlx") -> Check:
     """Loads the smallest panel model and runs one generation."""
     try:
         from advsafe.models import generate, get_model_config, load_model
@@ -197,14 +256,20 @@ def check_smoke_test() -> Check:
 
     try:
         cfg = get_model_config("llama-3.1-8b", config_dir="configs/models")
+        cfg.backend = backend  # exercise the backend we actually intend to run
         handle = load_model(cfg)
         gen = GenerationConfig(max_new_tokens=8, do_sample=False)
         r = generate(handle, prompt="Hello", gen_config=gen)
         if r.n_output_tokens > 0:
-            return Check("Smoke test", "pass", f"generated {r.n_output_tokens} tokens")
-        return Check("Smoke test", "fail", "generated 0 tokens")
+            return Check("Smoke test", "pass", f"[{backend}] generated {r.n_output_tokens} tokens")
+        return Check("Smoke test", "fail", f"[{backend}] generated 0 tokens")
     except Exception as e:  # noqa: BLE001
         return Check("Smoke test", "fail", str(e)[:200])
+
+
+def _detect_backend() -> str:
+    """Default the preflight backend: mlx if mlx-lm is importable, else hf."""
+    return "mlx" if importlib.util.find_spec("mlx_lm") is not None else "hf"
 
 
 @click.command()
@@ -220,23 +285,36 @@ def check_smoke_test() -> Check:
     show_default=True,
     help="Skip HF model access checks (default: skip; rely on smoke test)",
 )
-@click.option("--min-disk-gb", default=200, show_default=True)
-def cli(skip_smoke: bool, skip_models: bool, min_disk_gb: float) -> None:
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Compute backend to gate for (default: auto — mlx if mlx-lm is installed, else hf)",
+)
+@click.option("--min-disk-gb", default=None, type=float, show_default=True)
+def cli(
+    skip_smoke: bool, skip_models: bool, backend: str | None, min_disk_gb: float | None
+) -> None:
     """Run all preflight checks."""
+    backend = backend or _detect_backend()
+    # The MLX 4-bit panel + 8B guard is ~50 GB; the HF/CUDA full-precision panel ~200 GB.
+    if min_disk_gb is None:
+        min_disk_gb = 80.0 if backend == "mlx" else 200.0
+
     checks: list[Check] = []
 
-    console.print("[bold]advsafe preflight check[/bold]\n")
+    console.print(f"[bold]advsafe preflight check[/bold]  (backend: {backend})\n")
 
     checks.append(check_python_version())
-    checks.extend(check_imports())
-    checks.append(check_device())
-    checks.append(check_hf_token())
-    checks.append(check_openai_token())
+    checks.extend(check_imports(backend))
+    checks.append(check_device(backend))
+    checks.append(check_hf_token(backend))
+    checks.append(check_openai_judge())
     checks.append(check_disk_space(min_disk_gb))
     checks.append(check_configs_validate())
     checks.extend(check_datasets())
     if not skip_smoke:
-        checks.append(check_smoke_test())
+        checks.append(check_smoke_test(backend))
     else:
         checks.append(Check("Smoke test", "skip", "(skipped by flag)"))
 

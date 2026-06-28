@@ -70,7 +70,9 @@ class OpenAIJudge(JudgePlugin):
         api_key = os.environ.get(self.config.api_key_env)
         if not api_key:
             raise RuntimeError(f"Environment variable {self.config.api_key_env} is not set")
-        self._client = OpenAI(api_key=api_key)
+        # Bounded timeout + SDK-level retries so a transient API hiccup doesn't abort
+        # the whole cell's scoring (the OpenAI judge is the only judge for guard cells).
+        self._client = OpenAI(api_key=api_key, timeout=60.0, max_retries=4)
 
     def judge(self, response: GeneratedResponse) -> JudgeVerdict:
         if self._client is None:
@@ -78,14 +80,30 @@ class OpenAIJudge(JudgePlugin):
         assert self._client is not None
 
         prompt = _JUDGE_PROMPT.format(prompt=response.prompt, response=response.response)
-        completion = self._client.chat.completions.create(
-            model=self.config.api_model or "gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=self.config.temperature,
-            max_tokens=self.config.max_new_tokens,
-            response_format={"type": "json_object"},
-        )
-        raw = completion.choices[0].message.content or "{}"
+        try:
+            completion = self._client.chat.completions.create(
+                model=self.config.api_model or "gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_new_tokens,
+                response_format={"type": "json_object"},
+            )
+            raw = completion.choices[0].message.content or "{}"
+        except Exception as e:  # noqa: BLE001
+            # Degrade gracefully: mark this one prompt unjudged rather than aborting
+            # the cell. The manifest records the error for later re-judging.
+            logger.warning(
+                "OpenAI judge call failed; marking prompt unjudged", extra={"err": str(e)}
+            )
+            return JudgeVerdict(
+                prompt_id=response.prompt_id,
+                is_harmful=False,
+                confidence=None,
+                category=None,
+                raw_output="",
+                judge_name=self.config.api_model or "gpt-4o-mini",
+                metadata={"error": str(e), "unjudged": True},
+            )
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:

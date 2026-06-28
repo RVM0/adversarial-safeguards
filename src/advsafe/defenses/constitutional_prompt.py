@@ -53,7 +53,7 @@ class ConstitutionalPromptDefense(DefensePlugin):
                 )
                 constitution = _DEFAULT_CONSTITUTION
             else:
-                constitution = path.read_text()
+                constitution = path.read_text(encoding="utf-8")
         else:
             constitution = _DEFAULT_CONSTITUTION
 

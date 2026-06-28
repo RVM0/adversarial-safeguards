@@ -17,12 +17,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+# Core is PURE-PYTHON ONLY so it installs on any interpreter — including Python 3.14,
+# which has no torch wheels. The heavy ML stack (torch/transformers/peft/...) lives in
+# the [hf] extra; the Apple-Silicon path lives in [mlx]. Pick exactly one backend extra.
 dependencies = [
-    "torch>=2.4.0",
-    "transformers>=4.46.0",
-    "peft>=0.13.0",
-    "accelerate>=1.1.0",
-    "datasets>=3.0.0",
     "safetensors>=0.4.5",
     "pyyaml>=6.0",
     "click>=8.1.0",
@@ -46,11 +44,30 @@ dev = [
     "pre-commit>=4.0.0",
     "ipython>=8.0.0",
 ]
+# The torch/transformers/PEFT stack — the CUDA/Linux reproduction path. NOT installable
+# on Python 3.14 (no torch wheels); use the [mlx] backend locally instead.
+hf = [
+    "torch>=2.4.0",
+    "transformers>=4.46.0,<6.0.0",
+    "peft>=0.13.0",
+    "accelerate>=1.1.0",
+    "datasets>=3.0.0",
+]
 cuda = [
+    "advsafe[hf]",
     "bitsandbytes>=0.44.0",
     "flash-attn>=2.6.0; sys_platform == 'linux'",
 ]
 mps = []
+# Apple-Silicon, torch-free local backend. Lets the full 4-model panel (incl. 27B/32B
+# 4-bit QLoRA) run on a MacBook with no CUDA and no torch wheels (e.g. Python 3.14).
+# mlx-lm depends on transformers>=5 (tokenizers/chat-templates only); bound below the
+# next major so a future transformers 6 can't silently break the HF path.
+mlx = [
+    "mlx>=0.31.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-lm>=0.31.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "transformers>=5.0.0,<6.0.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 openai = [
     "openai>=1.50.0",
 ]

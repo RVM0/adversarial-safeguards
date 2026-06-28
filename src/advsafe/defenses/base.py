@@ -25,6 +25,10 @@ class DefenseConfig:
     # For Llama Guard-based defenses
     guard_model_id: str | None = None
     guard_revision: str | None = None
+    # Compute backend for the guard model: "hf" (torch) | "mlx" (Apple Silicon).
+    # guard_mlx_id is the pre-quantized MLX guard repo used when backend == "mlx".
+    backend: str = "hf"
+    guard_mlx_id: str | None = None
     block_categories: list[str] = field(default_factory=list)
     # For constitutional defenses
     system_prompt_path: str | None = None

@@ -81,6 +81,14 @@ class SDFParams:
     attack_budgets: list[int]
     refusal_rates: list[float]
     converged: bool
+    # Identifiability bookkeeping (readiness-review M1). With a 4-point budget grid a
+    # 4-parameter fit has residual_dof = 0, so r_squared ≡ 1 and the CIs are undefined —
+    # the "goodness of fit flags bad fits" story is then vacuous. `fix_R0` drops to 3 free
+    # params (R_0 pinned to the measured baseline) to recover a residual df; `saturated`
+    # is True whenever residual_dof <= 0 and callers must treat r_squared as meaningless.
+    n_free_params: int = 4
+    residual_dof: int = 0
+    saturated: bool = True
 
     def characteristic_budget(self) -> float:
         """The attack budget at which the curve hits its midpoint.
@@ -102,6 +110,7 @@ def safeguard_decay_function(
     refusal_rates: Iterable[float],
     initial_R0: float | None = None,
     initial_Rinf: float | None = None,
+    fix_R0: bool = False,
 ) -> SDFParams:
     """Fit the safeguard decay function to attack-vs-refusal data.
 
@@ -145,41 +154,56 @@ def safeguard_decay_function(
         sig = 1.0 / (1.0 + np.exp(-(xi - mu) / max(sigma, 1e-6)))
         return R_inf + (R_0 - R_inf) * (1 - sig)
 
+    n_free_params = 3 if fix_R0 else 4
+    R_0_fixed = float(rates[0])  # measured baseline (budget 0 sorts first)
     converged = False
+    R_0_fit, R_inf_fit, mu_fit, sigma_fit = R_0_guess, R_inf_guess, mu_guess, sigma_guess
     try:
         from scipy.optimize import OptimizeWarning, curve_fit  # type: ignore[import]
 
         # The covariance matrix is intentionally discarded (popt, _), which can
         # make scipy emit an OptimizeWarning about being unable to estimate it.
-        # That is benign here — we report our own r_squared/residual_std — so we
-        # silence just that category rather than letting it surface to the user.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", OptimizeWarning)
-            popt, _ = curve_fit(
-                _decay,
-                budgets,
-                rates,
-                p0=[R_0_guess, R_inf_guess, mu_guess, sigma_guess],
-                bounds=([0.0, 0.0, -5.0, 0.01], [1.0, 1.0, 10.0, 10.0]),
-                maxfev=5000,
-            )
-        R_0_fit, R_inf_fit, mu_fit, sigma_fit = (float(p) for p in popt)
+            if fix_R0:
+                # Pin R_0 to the measured baseline → 3 free params, so a 4-point grid
+                # keeps 1 residual df (the 4-param fit would be saturated at R²≡1).
+                def _decay3(N_arr, R_inf, mu, sigma):
+                    return _decay(N_arr, R_0_fixed, R_inf, mu, sigma)
+
+                popt, _ = curve_fit(
+                    _decay3,
+                    budgets,
+                    rates,
+                    p0=[R_inf_guess, mu_guess, sigma_guess],
+                    bounds=([0.0, -5.0, 0.01], [1.0, 10.0, 10.0]),
+                    maxfev=5000,
+                )
+                R_0_fit = R_0_fixed
+                R_inf_fit, mu_fit, sigma_fit = (float(p) for p in popt)
+            else:
+                popt, _ = curve_fit(
+                    _decay,
+                    budgets,
+                    rates,
+                    p0=[R_0_guess, R_inf_guess, mu_guess, sigma_guess],
+                    bounds=([0.0, 0.0, -5.0, 0.01], [1.0, 1.0, 10.0, 10.0]),
+                    maxfev=5000,
+                )
+                R_0_fit, R_inf_fit, mu_fit, sigma_fit = (float(p) for p in popt)
         converged = True
     except Exception:  # noqa: BLE001 — fallback if scipy missing or fit fails
-        R_0_fit, R_inf_fit, mu_fit, sigma_fit = (
-            R_0_guess,
-            R_inf_guess,
-            mu_guess,
-            sigma_guess,
-        )
+        if fix_R0:
+            R_0_fit = R_0_fixed
 
-    # Compute goodness-of-fit
+    # Compute goodness-of-fit + honest identifiability bookkeeping.
     predicted = _decay(budgets, R_0_fit, R_inf_fit, mu_fit, sigma_fit)
     residuals = rates - predicted
     ss_res = float(np.sum(residuals**2))
     ss_tot = float(np.sum((rates - rates.mean()) ** 2)) if len(rates) > 1 else 0.0
     r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
     residual_std = float(np.std(residuals))
+    residual_dof = len(budgets) - n_free_params
 
     return SDFParams(
         R_0=R_0_fit,
@@ -191,6 +215,9 @@ def safeguard_decay_function(
         attack_budgets=budgets.tolist(),
         refusal_rates=rates.tolist(),
         converged=converged,
+        n_free_params=n_free_params,
+        residual_dof=residual_dof,
+        saturated=residual_dof <= 0,
     )
 
 

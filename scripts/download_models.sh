@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
-# Pull all four panel models into the HuggingFace cache.
+# Pull all four full-precision panel models (torch/CUDA path) into the HuggingFace cache.
 #
 # Note: most of these are gated (Llama, Gemma) and require HF token + license
 # acceptance on the model page. Set HF_TOKEN before running.
+#
+# On an Apple-Silicon laptop the MLX backend loads pre-quantized 4-bit repos instead —
+# run scripts/download_models_mlx.sh for those (the fp16 repos below are not what the
+# MLX path loads).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+if [ "$(uname -s)" = "Darwin" ] && [ "$(uname -m)" = "arm64" ]; then
+    echo "[advsafe] Apple Silicon detected. The MLX backend loads 4-bit repos, not these"
+    echo "[advsafe] fp16 weights — run scripts/download_models_mlx.sh for the local path."
+fi
 
 # shellcheck disable=SC1091
 source .venv/bin/activate 2>/dev/null || true

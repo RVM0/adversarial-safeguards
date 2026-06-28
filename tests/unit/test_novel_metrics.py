@@ -66,6 +66,28 @@ def test_sdf_characteristic_budget_positive():
     assert result.characteristic_budget() > 0
 
 
+def test_sdf_4param_on_4points_is_flagged_saturated():
+    """Review M1: a 4-parameter fit on 4 points has 0 residual df and a vacuous R²≡1."""
+    from advsafe.analysis.novel_metrics import safeguard_decay_function
+
+    result = safeguard_decay_function([0, 10, 100, 1000], [0.95, 0.70, 0.30, 0.05])
+    assert result.n_free_params == 4
+    assert result.residual_dof == 0
+    assert result.saturated is True
+
+
+def test_sdf_fix_r0_recovers_residual_df():
+    """fix_R0 pins R_0 to the measured baseline (3 free params) → identifiable on 4 points."""
+    from advsafe.analysis.novel_metrics import safeguard_decay_function
+
+    rates = [0.95, 0.70, 0.30, 0.05]
+    result = safeguard_decay_function([0, 10, 100, 1000], rates, fix_R0=True)
+    assert result.n_free_params == 3
+    assert result.residual_dof == 1
+    assert result.saturated is False
+    assert abs(result.R_0 - rates[0]) < 1e-9  # pinned to the measured baseline
+
+
 # ============================================================================
 # Defense Marginal Value (DMV)
 # ============================================================================

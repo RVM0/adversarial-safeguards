@@ -34,6 +34,31 @@ has previously characterized the attack--defense relationship in
 computational-security terms. ACE is a single number per cell that the
 proposal recommends as a standard reporting unit.
 
+### Two readings: laptop-cost (primary) and FLOPs (secondary)
+
+The FLOPs ratio above is **platform-invariant** — it is the same number whether
+the attack runs on a datacenter A100 or a consumer laptop, because the hardware's
+throughput cancels in the ratio. That makes it a clean hardware-independent
+cross-check, but it cannot, on its own, say anything about *who can afford the
+attack*. The project's headline claim is an accessibility claim: a ~$3,000
+consumer laptop is enough to strip safety from open-weight models. To express
+that, ACE is re-anchored to **concrete laptop cost**:
+
+  - **Primary (cost-anchored):** the *measured* per-attack laptop training time
+    (``train_wall_clock_s`` recorded by the MLX backend's attack manifest)
+    reported as **laptop-hours** and, via an amortized $/laptop-hour rate, as
+    **dollars** on the reference $3k laptop. This is the number that speaks to
+    release-tiering policy: "stripping safety costs X laptop-hours / $Y."
+  - **Secondary (hardware-independent):** the classic ``ACE = log10(FLOPs
+    ratio)``, retained as a portable cross-check that does not depend on which
+    machine ran the attack.
+
+Note these two are *not* redundant: a laptop-seconds *ratio* (attacker
+train-time ÷ defender per-query time) on a single machine would just reproduce
+the FLOPs ratio (throughput cancels). The new information the laptop reading
+carries is therefore the **absolute** attacker cost, not another ratio. See
+``LaptopCostModel`` / ``cost_anchored_ace`` below.
+
 ### Formula references
 
 Transformer FLOPs accounting (Kaplan et al. 2020; Hoffmann et al. 2022):
@@ -51,8 +76,9 @@ as full fine-tuning, not just adapter-sized.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # FLOPs accounting
@@ -317,6 +343,256 @@ def conditional_ace(
 
 
 # ---------------------------------------------------------------------------
+# Cost-anchored ACE (the primary, accessibility-relevant reading)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LaptopCostModel:
+    """Amortized dollar cost of one hour on the reference $3k consumer laptop.
+
+    The headline claim of this project is an *accessibility* claim — that a
+    ~$3,000 consumer laptop (the Apple-Silicon machine the MLX backend runs on)
+    is enough to strip safety from open-weight models. To put a dollar figure on
+    a measured attack we need a $/laptop-hour rate. We model it as straight-line
+    capital depreciation plus electricity:
+
+        usd_per_laptop_hour = laptop_price / amortization_hours
+                              + electricity_usd_per_hour
+
+    Defaults: a $3,000 laptop depreciated straight-line over a 3-year service
+    life (calendar hours), plus ~$0.01/hr of electricity (≈50 W of sustained
+    load at $0.20/kWh). That yields ≈ $0.12/laptop-hour.
+
+    Two honesty notes carried deliberately in the docs and the result object:
+
+      - **Laptop-hours is the robust unit.** The dollar figure is dominated by
+        the amortization assumption, which is why ``cost_anchored_ace`` reports
+        laptop-hours as the primary physical quantity and dollars as a derived
+        convenience under a *stated, adjustable* rate.
+      - **The real barrier to entry is the one-time $3k capital outlay**, not the
+        per-attack marginal dollars. ``laptop_price_usd`` is surfaced alongside
+        the marginal cost so the framing is not misleadingly glib.
+
+    All fields are adjustable so a report can re-price under its own assumptions
+    (a dedicated/always-on attacker, a cheaper laptop, a different region's
+    electricity, faster depreciation, etc.).
+    """
+
+    laptop_price_usd: float = 3000.0
+    amortization_years: float = 3.0
+    electricity_usd_per_hour: float = 0.01
+    hours_per_year: float = 365.25 * 24  # straight-line calendar depreciation
+
+    @property
+    def amortization_hours(self) -> float:
+        return self.amortization_years * self.hours_per_year
+
+    @property
+    def usd_per_laptop_hour(self) -> float:
+        if self.amortization_hours <= 0:
+            raise ValueError("amortization_hours must be positive")
+        capital_per_hour = self.laptop_price_usd / self.amortization_hours
+        return capital_per_hour + self.electricity_usd_per_hour
+
+
+@dataclass(frozen=True)
+class CostACEResult:
+    """Cost-anchored ACE for one (model, attack-budget) cell.
+
+    Bundles the **primary** laptop-cost reading (what the attack actually costs
+    on the reference $3k laptop) with the **secondary** hardware-independent
+    FLOPs-ACE, so a single object is enough to report one grid cell.
+
+    Attributes:
+        train_wall_clock_s:    Measured LoRA training wall-clock for this cell
+                               (from the MLX backend's ``train_wall_clock_s``).
+        attacker_laptop_hours: ``train_wall_clock_s`` / 3600 — the robust,
+                               hardware-anchored cost unit.
+        attacker_usd:          Amortized dollar cost = laptop-hours × rate.
+        usd_per_laptop_hour:    The amortized rate used (from ``LaptopCostModel``).
+        laptop_price_usd:       One-time capital outlay (the true barrier to entry).
+        interpretation:        Human-readable band for the laptop-hours cost.
+        flops_ace:             The secondary hardware-independent ACEResult
+                               (``log10(FLOPs ratio)``) for the same cell.
+        target_model_params:    Params of the attacked model (cell identity).
+        n_attack_examples:      Attack budget for this cell (cell identity).
+    """
+
+    train_wall_clock_s: float
+    attacker_laptop_hours: float
+    attacker_usd: float
+    usd_per_laptop_hour: float
+    laptop_price_usd: float
+    interpretation: str
+    flops_ace: ACEResult
+    target_model_params: float
+    n_attack_examples: int
+
+    @property
+    def ace_flops(self) -> float:
+        """Shorthand for the secondary FLOPs-ACE scalar (``flops_ace.ace``)."""
+        return self.flops_ace.ace
+
+
+def _interpret_laptop_cost(laptop_hours: float) -> str:
+    """Map attacker laptop-hours to a human-readable accessibility band.
+
+    Bands are chosen around a single consumer laptop's natural time scales: an
+    hour, a working day (8h), a calendar day (24h), a week (168h).
+    """
+    if laptop_hours < 1:
+        return "trivial — strips safety in under an hour of laptop time"
+    if laptop_hours < 8:
+        return "cheap — within a single working day on one laptop"
+    if laptop_hours < 24:
+        return "moderate — about a day of laptop time"
+    if laptop_hours < 168:
+        return "costly — multiple days of laptop time"
+    return "expensive on a single consumer laptop (>1 week of compute)"
+
+
+def attacker_laptop_cost(
+    train_wall_clock_s: float,
+    cost_model: LaptopCostModel | None = None,
+) -> tuple[float, float]:
+    """Convert a measured training wall-clock into (laptop_hours, usd).
+
+    Args:
+        train_wall_clock_s: Measured LoRA training time in seconds (the MLX
+            backend records this as ``train_wall_clock_s`` in the attack
+            manifest).
+        cost_model: Amortization model. Defaults to the reference $3k laptop.
+
+    Returns:
+        ``(attacker_laptop_hours, attacker_usd)``.
+    """
+    if train_wall_clock_s < 0:
+        raise ValueError(f"train_wall_clock_s must be non-negative, got {train_wall_clock_s}")
+    cost_model = cost_model or LaptopCostModel()
+    laptop_hours = train_wall_clock_s / 3600.0
+    usd = laptop_hours * cost_model.usd_per_laptop_hour
+    return laptop_hours, usd
+
+
+def cost_anchored_ace(
+    train_wall_clock_s: float,
+    target_model_params: float,
+    n_attack_examples: int,
+    attack_seq_len: int = 512,
+    attack_epochs: int = 3,
+    defense_classifier_params: float = 8e9,
+    defense_input_tokens: int = 512,
+    cost_model: LaptopCostModel | None = None,
+) -> CostACEResult:
+    """Cost-anchored ACE: measured laptop cost (primary) + FLOPs-ACE (secondary).
+
+    The primary reading turns the measured per-attack training time into the
+    concrete cost of mounting the attack on the reference $3k laptop, reported as
+    laptop-hours and amortized dollars. The secondary reading is the classic
+    hardware-independent ``log10(FLOPs ratio)`` ACE, computed for the same cell
+    and carried along as a portable cross-check.
+
+    Args:
+        train_wall_clock_s:        Measured LoRA training wall-clock (seconds).
+        target_model_params:       Parameter count of the attacked model.
+        n_attack_examples:         Number of harmful fine-tuning examples.
+        attack_seq_len:            Tokens per training example (FLOPs side).
+        attack_epochs:             Training epochs (FLOPs side).
+        defense_classifier_params: Defense classifier params (FLOPs side).
+        defense_input_tokens:      Defense input length (FLOPs side).
+        cost_model:                Laptop amortization model (default: $3k laptop).
+
+    Returns:
+        CostACEResult with both readings.
+
+    Example:
+        >>> # A measured 18-minute LoRA run attacking an 8B model with 100 examples
+        >>> r = cost_anchored_ace(
+        ...     train_wall_clock_s=18 * 60,
+        ...     target_model_params=8e9,
+        ...     n_attack_examples=100,
+        ... )
+        >>> round(r.attacker_laptop_hours, 2)
+        0.3
+        >>> r.attacker_usd < 0.10  # pocket change under the default amortization
+        True
+        >>> 2.8 < r.ace_flops < 3.1  # secondary FLOPs-ACE unchanged
+        True
+    """
+    cost_model = cost_model or LaptopCostModel()
+    laptop_hours, usd = attacker_laptop_cost(train_wall_clock_s, cost_model)
+    flops_ace = adversarial_compute_equivalence(
+        target_model_params=target_model_params,
+        n_attack_examples=n_attack_examples,
+        attack_seq_len=attack_seq_len,
+        attack_epochs=attack_epochs,
+        defense_classifier_params=defense_classifier_params,
+        defense_input_tokens=defense_input_tokens,
+    )
+    return CostACEResult(
+        train_wall_clock_s=train_wall_clock_s,
+        attacker_laptop_hours=laptop_hours,
+        attacker_usd=usd,
+        usd_per_laptop_hour=cost_model.usd_per_laptop_hour,
+        laptop_price_usd=cost_model.laptop_price_usd,
+        interpretation=_interpret_laptop_cost(laptop_hours),
+        flops_ace=flops_ace,
+        target_model_params=target_model_params,
+        n_attack_examples=n_attack_examples,
+    )
+
+
+def cost_anchored_ace_from_manifest(
+    manifest: Mapping[str, Any],
+    target_model_params: float,
+    attack_seq_len: int = 512,
+    defense_classifier_params: float = 8e9,
+    defense_input_tokens: int = 512,
+    cost_model: LaptopCostModel | None = None,
+) -> CostACEResult:
+    """Build a CostACEResult from an MLX attack manifest dict.
+
+    Reads ``train_wall_clock_s`` (measured laptop training time), the attack
+    budget (``n_examples_actual``, falling back to ``n_examples_requested``), and
+    ``epochs`` straight from the manifest the MLX backend writes, so the analysis
+    layer does no file I/O of its own — the caller passes the parsed dict.
+
+    Args:
+        manifest:             Parsed ``attack_manifest.json`` from the MLX backend.
+        target_model_params:  Parameter count of the attacked model (not stored
+                              in the manifest; supplied from the model config).
+        attack_seq_len:       Tokens per example for the FLOPs-side estimate.
+        defense_classifier_params: Defense classifier params (FLOPs side).
+        defense_input_tokens: Defense input length (FLOPs side).
+        cost_model:           Laptop amortization model.
+
+    Raises:
+        KeyError: if the manifest has no ``train_wall_clock_s`` (e.g. it predates
+            timing instrumentation, or came from a non-MLX path).
+    """
+    if "train_wall_clock_s" not in manifest:
+        raise KeyError(
+            "manifest has no 'train_wall_clock_s'; cost-anchored ACE needs the "
+            "measured laptop training time. Re-run the attack on the MLX backend "
+            "(train_lora_mlx records it) or pass train_wall_clock_s directly."
+        )
+    n_examples = manifest.get("n_examples_actual")
+    if n_examples is None:
+        n_examples = manifest.get("n_examples_requested", 0)
+    return cost_anchored_ace(
+        train_wall_clock_s=float(manifest["train_wall_clock_s"]),
+        target_model_params=target_model_params,
+        n_attack_examples=int(n_examples or 0),
+        attack_seq_len=attack_seq_len,
+        attack_epochs=int(manifest.get("epochs", 3)),
+        defense_classifier_params=defense_classifier_params,
+        defense_input_tokens=defense_input_tokens,
+        cost_model=cost_model,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Convenience: ACE matrix over the experimental grid
 # ---------------------------------------------------------------------------
 
@@ -341,4 +617,59 @@ def ace_grid(
                 defense_classifier_params=defense_classifier_params,
                 defense_input_tokens=defense_input_tokens,
             )
+    return out
+
+
+def cost_ace_grid(
+    model_param_counts: dict[str, float],
+    measured_train_seconds: Mapping[tuple[str, int], float],
+    cost_model: LaptopCostModel | None = None,
+    attack_seq_len: int = 512,
+    attack_epochs: int = 3,
+    defense_classifier_params: float = 8e9,
+    defense_input_tokens: int = 512,
+) -> dict[tuple[str, int], CostACEResult]:
+    """Cost-anchored ACE over the (model, attack-budget) grid.
+
+    Unlike ``ace_grid`` (deterministic from hyperparameters), the cost reading
+    needs the *measured* per-cell laptop training time, so the grid is keyed by
+    the measured-seconds map rather than enumerated from budgets. Pass the
+    ``train_wall_clock_s`` values harvested from each cell's MLX attack manifest.
+
+    Args:
+        model_param_counts:     Map model name → parameter count (for the FLOPs
+                                secondary reading).
+        measured_train_seconds: Map (model name, attack budget) → measured LoRA
+                                training wall-clock in seconds.
+        cost_model:             Laptop amortization model (default: $3k laptop).
+        attack_seq_len:         Tokens per example (FLOPs side).
+        attack_epochs:          Training epochs (FLOPs side).
+        defense_classifier_params: Defense classifier params (FLOPs side).
+        defense_input_tokens:   Defense input length (FLOPs side).
+
+    Returns:
+        Map (model, budget) → CostACEResult.
+
+    Raises:
+        KeyError: if a measured-seconds key names a model absent from
+            ``model_param_counts``.
+    """
+    cost_model = cost_model or LaptopCostModel()
+    out: dict[tuple[str, int], CostACEResult] = {}
+    for (model_name, budget), seconds in measured_train_seconds.items():
+        if model_name not in model_param_counts:
+            raise KeyError(
+                f"measured_train_seconds references model {model_name!r} not in "
+                f"model_param_counts (have {sorted(model_param_counts)})"
+            )
+        out[(model_name, budget)] = cost_anchored_ace(
+            train_wall_clock_s=seconds,
+            target_model_params=model_param_counts[model_name],
+            n_attack_examples=budget,
+            attack_seq_len=attack_seq_len,
+            attack_epochs=attack_epochs,
+            defense_classifier_params=defense_classifier_params,
+            defense_input_tokens=defense_input_tokens,
+            cost_model=cost_model,
+        )
     return out

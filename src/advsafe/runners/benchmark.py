@@ -40,7 +40,6 @@ def _benchmark_inference(
 ) -> BenchmarkResult:
     from advsafe.models import generate, get_model_config, load_model
     from advsafe.types import GenerationConfig
-    from advsafe.utils.device import get_device
 
     cfg = get_model_config(model_name, config_dir="configs/models")
     handle = load_model(cfg)
@@ -69,7 +68,9 @@ def _benchmark_inference(
 
     return BenchmarkResult(
         model_name=model_name,
-        device=str(get_device()),
+        device=str(
+            handle.device
+        ),  # MLXDevice on the MLX path; torch.device on HF — both str()-able
         inference_tokens_per_sec=tps,
         training_examples_per_sec=None,  # not benchmarked here
         avg_inference_latency_s=avg_latency,
@@ -77,14 +78,32 @@ def _benchmark_inference(
     )
 
 
+def _is_mlx_device(device: str) -> bool:
+    """True if a benchmark device string denotes the Apple-Silicon MLX path."""
+    return device.lower().startswith("mlx")
+
+
 def _project_sweep_cost(
     results: dict[str, BenchmarkResult],
     sweep_path: Path,
     a100_hourly: float = 1.29,
 ) -> dict:
-    """Project sweep wall-clock + cost from per-model benchmarks."""
+    """Project sweep wall-clock (and, on the cloud path, $-cost) from per-model benchmarks.
+
+    Inference hours use the *measured* tokens/sec, so they are real local wall-clock on
+    whatever device was benchmarked. The training-hours estimate and the $-figure are A100
+    heuristics (hardcoded ex/sec + $/hr) and are only meaningful on the hf/CUDA path. When
+    every benchmarked model ran on MLX we treat the projection as local: the $-cost is
+    suppressed (the laptop is owned, not rented) and the training estimate is flagged as
+    A100-equivalent — there is no local training benchmark here. See ``cost_basis``.
+    """
     with sweep_path.open() as f:
         sweep = yaml.safe_load(f)
+
+    # "Local" when every benchmarked model ran on MLX. Measured inference throughput is
+    # still real local wall-clock; only the A100 $/hr and A100 training-throughput
+    # heuristics stop being meaningful. Empty results → keep the A100 default.
+    is_local = bool(results) and all(_is_mlx_device(r.device) for r in results.values())
 
     # Heuristic: average 200 tokens out per eval prompt; 880 prompts per cell
     # (HarmBench + StrongREJECT + MT-Bench + XSTest combined).
@@ -120,11 +139,19 @@ def _project_sweep_cost(
         per_model_breakdown[model_name]["infer"] += inference_time
 
     total_hours = (total_training_sec + total_inference_sec) / 3600
-    cost = total_hours * a100_hourly
+    # Gate the $-figure behind the cloud path: the A100 rate is meaningless on the laptop.
+    cost = None if is_local else total_hours * a100_hourly
 
     return {
+        "is_local": is_local,
         "total_hours": total_hours,
         "total_cost_usd": cost,
+        "cost_basis": (
+            "local MLX laptop — A100 $-projection N/A (owned hardware); training hours "
+            "are an A100-equivalent heuristic, not a local benchmark"
+            if is_local
+            else f"A100 80GB @ ${a100_hourly}/hr (Lambda Labs)"
+        ),
         "training_hours": total_training_sec / 3600,
         "inference_hours": total_inference_sec / 3600,
         "per_model": {
@@ -212,10 +239,15 @@ def cli(
             f"  Training: {projection['training_hours']:.1f} hr · "
             f"Inference: {projection['inference_hours']:.1f} hr"
         )
-        console.print(
-            f"  [bold]Total: {projection['total_hours']:.1f} hr ≈ "
-            f"${projection['total_cost_usd']:.2f} @ ${a100_hourly}/hr[/bold]"
-        )
+        if projection["total_cost_usd"] is None:
+            # MLX/local path: report wall-clock only; the A100 $-figure does not apply.
+            console.print(f"  [bold]Total wall-clock: {projection['total_hours']:.1f} hr[/bold]")
+            console.print(f"  [dim]{projection['cost_basis']}[/dim]")
+        else:
+            console.print(
+                f"  [bold]Total: {projection['total_hours']:.1f} hr ≈ "
+                f"${projection['total_cost_usd']:.2f} @ ${a100_hourly}/hr[/bold]"
+            )
         table = Table(title="Per-model projection")
         table.add_column("model")
         table.add_column("train hr")

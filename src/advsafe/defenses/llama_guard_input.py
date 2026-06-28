@@ -47,9 +47,13 @@ class LlamaGuardInputDefense(DefensePlugin):
 
     def setup(self) -> None:
         if self._classifier is None:
+            from advsafe.judges.llama_guard import DEFAULT_GUARD_HF_ID
+
             self._classifier = LlamaGuardClassifier(
-                hf_id=self.config.guard_model_id or "meta-llama/Llama-Guard-3-8B",
+                hf_id=self.config.guard_model_id or DEFAULT_GUARD_HF_ID,
                 revision=self.config.guard_revision,
+                backend=self.config.backend,
+                mlx_id=self.config.guard_mlx_id,
             )
             self._classifier.setup()
 

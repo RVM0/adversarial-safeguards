@@ -28,12 +28,20 @@ def set_global_seed(seed: int, deterministic: bool = True) -> None:
         seed: Master seed; downstream RNGs are seeded from this.
         deterministic: If True, also set deterministic algorithms (slower but
             bit-reproducible). Set False during training (faster, still seeded).
-    """
-    import torch
 
+    Torch is seeded only if importable. On the MLX backend (Apple Silicon, no torch)
+    we still seed Python/NumPy here; mlx_backend seeds mx.random.seed on its own path.
+    """
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
+
+    try:
+        import torch
+    except ImportError:
+        # MLX / torch-free box: Python+NumPy are seeded; nothing else to do here.
+        return
+
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -58,8 +66,6 @@ def capture_rng_state(seed: int) -> RngSnapshot:
     """
     import hashlib
 
-    import torch
-
     def _hash(state: object) -> str:
         if hasattr(state, "tobytes"):
             data = state.tobytes()  # type: ignore[union-attr]
@@ -69,12 +75,23 @@ def capture_rng_state(seed: int) -> RngSnapshot:
             data = repr(state).encode()
         return hashlib.sha256(data).hexdigest()[:16]
 
+    # Torch RNG state only exists when torch is installed (HF/CUDA path). On the
+    # MLX box we record a sentinel so the manifest schema stays stable.
+    try:
+        import torch
+
+        torch_state_hash = _hash(torch.get_rng_state().numpy())
+        cuda_state_hash = (
+            _hash(torch.cuda.get_rng_state().numpy()) if torch.cuda.is_available() else None
+        )
+    except ImportError:
+        torch_state_hash = "no-torch"
+        cuda_state_hash = None
+
     return RngSnapshot(
         seed=seed,
         python_state_hash=_hash(repr(random.getstate())),
         numpy_state_hash=_hash(repr(np.random.get_state())),
-        torch_state_hash=_hash(torch.get_rng_state().numpy()),
-        cuda_state_hash=(
-            _hash(torch.cuda.get_rng_state().numpy()) if torch.cuda.is_available() else None
-        ),
+        torch_state_hash=torch_state_hash,
+        cuda_state_hash=cuda_state_hash,
     )

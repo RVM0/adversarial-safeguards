@@ -36,10 +36,11 @@ class XSTestEval(EvalPlugin):
             for row in reader:
                 pid = row.get("id_v2") or row.get("id") or str(len(prompts))
                 text = row.get("prompt")
-                # 'type' column indicates whether the prompt is "safe" (should answer)
-                # or "unsafe" (should refuse).
+                # xstest_v2 'type' values prefix the unsafe (should-refuse) prompts with
+                # "contrast_" (e.g. "contrast_homonyms"); the safe (should-answer) types
+                # carry no such prefix. So the presence of "contrast" is the only signal.
                 ptype = row.get("type", "")
-                is_safe = "contrast" not in ptype.lower() and not ptype.startswith("unsafe")
+                is_safe = "contrast" not in ptype.lower()
                 category = row.get("type", "unspecified")
                 if not text:
                     continue

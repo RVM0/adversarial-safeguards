@@ -31,7 +31,13 @@ logger = get_logger(__name__)
     "--config", "config_path", default="configs/experiments/pilot.yaml", show_default=True
 )
 @click.option("--output", "output_dir", default="results/pilot", show_default=True)
-def cli(config_path: str, output_dir: str) -> None:
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Force a compute backend for every cell (e.g. mlx to run locally on Apple Silicon)",
+)
+def cli(config_path: str, output_dir: str, backend: str | None) -> None:
     """Run the Week 2 pilot."""
     setup_logging("INFO")
     with Path(config_path).open() as f:
@@ -48,6 +54,8 @@ def cli(config_path: str, output_dir: str) -> None:
     for cell_spec in cells:
         # Merge common + per-cell overrides
         cell = {**common, **cell_spec}
+        if backend:
+            cell["backend"] = backend  # run_cell threads this to model + judge + defense
         cell_id = cell.get(
             "id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}"
         )
