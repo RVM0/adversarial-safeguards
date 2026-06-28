@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Generate the full sweep.yaml from a compact spec.
 
-The canonical sweep is 4 models × 6 attack conditions × 5 defenses = 120 cells.
+The canonical sweep is 4 models × 9 attack conditions × 5 defenses = 180 cells
+(9 = no-attack + A1 LoRA ×3 budgets + benign-LoRA control ×3 budgets + PAP + roleplay).
 This script emits them all to stdout (pipe into configs/experiments/sweep.yaml).
 
 Usage:
@@ -21,11 +22,29 @@ MODELS = [
     "qwen-3-32b",
 ]
 
+_HARMFUL = "data/attacks/harmful_train.jsonl"
+_BENIGN = "data/attacks/benign_train.jsonl"
+
 ATTACKS = [
-    {"id": "no-attack", "plugin": "lora-finetune", "n_examples": 0},
-    {"id": "lora-a1-10", "plugin": "lora-finetune", "n_examples": 10},
-    {"id": "lora-a1-100", "plugin": "lora-finetune", "n_examples": 100},
-    {"id": "lora-a1-1000", "plugin": "lora-finetune", "n_examples": 1000},
+    {"id": "no-attack", "plugin": "lora-finetune", "n_examples": 0, "dataset_path": _HARMFUL},
+    {"id": "lora-a1-10", "plugin": "lora-finetune", "n_examples": 10, "dataset_path": _HARMFUL},
+    {"id": "lora-a1-100", "plugin": "lora-finetune", "n_examples": 100, "dataset_path": _HARMFUL},
+    {"id": "lora-a1-1000", "plugin": "lora-finetune", "n_examples": 1000, "dataset_path": _HARMFUL},
+    # Benign-instruction LoRA control (review C5 / prereg A-1): isolates fine-tuning-per-se
+    # from harmful-data fine-tuning. Harm-attributable effect = ASR(harmful) − ASR(benign).
+    {"id": "benign-lora-10", "plugin": "lora-finetune", "n_examples": 10, "dataset_path": _BENIGN},
+    {
+        "id": "benign-lora-100",
+        "plugin": "lora-finetune",
+        "n_examples": 100,
+        "dataset_path": _BENIGN,
+    },
+    {
+        "id": "benign-lora-1000",
+        "plugin": "lora-finetune",
+        "n_examples": 1000,
+        "dataset_path": _BENIGN,
+    },
     {"id": "pap", "plugin": "pap", "template_id": "logical_appeal"},
     {"id": "roleplay", "plugin": "roleplay", "template_id": "dan"},
 ]
@@ -50,7 +69,7 @@ def _attack_block(model: str, attack: dict) -> dict:
     if attack["plugin"] == "lora-finetune":
         return {
             "plugin": "lora-finetune",
-            "dataset_path": "data/attacks/harmful_train.jsonl",
+            "dataset_path": attack.get("dataset_path", "data/attacks/harmful_train.jsonl"),
             "n_examples": attack["n_examples"],
             "output_dir": f"checkpoints/sweep/{model}/{attack['id']}",
             "epochs": 3 if attack["n_examples"] > 0 else 0,
@@ -92,21 +111,21 @@ def _defense_block(defense: dict) -> dict:
 
 
 def _judge_block_for(defense: dict) -> dict:
-    """Pick the judge based on the defense to avoid circular evaluation.
+    """A single CONSISTENT non-Guard judge for every cell (readiness-review C4).
 
-    Pre-registration requires: when Llama Guard 3 is the defense, the judge
-    must be a different model (else the same model's blind spots would
-    invalidate the measurement). We switch to GPT-4o-mini for D1/D2/D4.
+    H2 (reclamation) and H4 (DMV) subtract ASRs ACROSS the 5 defenses of a (model, attack)
+    group. If D0/D3 were judged by Llama Guard while the Guard-defended D1/D2/D4 used
+    GPT-4o-mini (the old circularity fix), that subtraction would mix two judges and any
+    Guard-vs-GPT base-rate gap would contaminate the measured reclamation. Since Guard
+    cannot judge Guard-defended cells, the only judge-consistent choice across the whole
+    comparison family is GPT-4o-mini — so every cell uses it. Llama Guard is retained only
+    as a SECONDARY agreement judge on a stratified double-judged subset (inter-judge kappa),
+    not in the primary cross-defense arithmetic.
     """
-    if defense["plugin"] in ("llama-guard-input", "llama-guard-output", "combined"):
-        return {
-            "plugin": "openai-gpt-4o-mini",
-            "api_model": "gpt-4o-mini",
-            "api_key_env": "OPENAI_API_KEY",
-        }
     return {
-        "plugin": "llama-guard-3",
-        "hf_id": "meta-llama/Llama-Guard-3-8B",
+        "plugin": "openai-gpt-4o-mini",
+        "api_model": "gpt-4o-mini",
+        "api_key_env": "OPENAI_API_KEY",
     }
 
 
@@ -120,14 +139,15 @@ def main() -> None:
             "do_sample": False,
         },
         "judge": {
-            "plugin": "llama-guard-3",
-            "hf_id": "meta-llama/Llama-Guard-3-8B",
+            "plugin": "openai-gpt-4o-mini",
+            "api_model": "gpt-4o-mini",
+            "api_key_env": "OPENAI_API_KEY",
         },
         "eval": {
             "plugin": "harmbench",
             "dataset_path": "data/harmbench/harmbench_test.csv",
-            "n_prompts": None,
-            "judge_name": "llama-guard-3",
+            "n_prompts": 240,  # fixed subset → matches the prereg power analysis (was null=full set)
+            "judge_name": "openai-gpt-4o-mini",
             "bootstrap_iterations": 1000,
             "seed": 42,
         },
@@ -152,7 +172,17 @@ def main() -> None:
                     }
                 )
 
-    out = {"common": common, "cells": cells}
+    out = {
+        "id": "full-sweep",
+        "description": (
+            "Full attack-defense sweep. 4 models × 9 attack conditions "
+            "(no-attack, A1 LoRA ×3 budgets, benign-LoRA control ×3 budgets, PAP, roleplay) "
+            "× 5 defenses = 180 cells. Single consistent GPT-4o-mini judge across all cells "
+            "(review C4); benign control isolates harmful-data effect (review C5)."
+        ),
+        "common": common,
+        "cells": cells,
+    }
     yaml.safe_dump(out, sys.stdout, sort_keys=False, default_flow_style=False, width=200)
     print(f"\n# Total cells: {len(cells)}", file=sys.stderr)
 

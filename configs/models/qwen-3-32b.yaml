@@ -2,6 +2,11 @@
 name: qwen-3-32b
 hf_id: Qwen/Qwen3-32B
 revision: null  # TODO: pin after first download
+# Local Apple-Silicon path: uncomment `backend: mlx` to attack/eval this 32B on the
+# laptop via torch-free MLX QLoRA. This is what makes the "$3k laptop attacks the 32B
+# flagship" claim — a 4-bit 32B is ~18 GB, fits in 64 GB with LoRA training overhead.
+# backend: mlx
+mlx_id: mlx-community/Qwen3-32B-4bit  # confirm exact id on hf.co/mlx-community
 family: qwen
 params_billion: 32.0
 use_quantization: true  # 4-bit QLoRA — CUDA only
@@ -9,8 +14,9 @@ use_flash_attn: true
 trust_remote_code: false
 max_seq_len: 4096
 notes: |
-  Best fine-tunable Chinese model in our hardware tier. Requires 4-bit
-  quantization (QLoRA) on a single A100 80GB. On the M5 Pro MacBook, this
-  is not feasible; the cloud sweep is the only place this model gets
-  attacked. The "thinking mode" toggle adds another attack surface — we
-  evaluate both modes if time permits.
+  Best fine-tunable Chinese model in our hardware tier. The HF/CUDA path needs
+  4-bit QLoRA on an A100 80GB. The MLX backend (backend: mlx) runs the same 4-bit
+  QLoRA natively on the M5 Pro 64 GB laptop, torch-free — this model is the
+  centerpiece of the "$3k laptop attacks the 32B flagship" accessibility claim.
+  The "thinking mode" toggle adds another attack surface — we evaluate both modes
+  if time permits.

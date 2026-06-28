@@ -43,16 +43,41 @@ logger = get_logger(__name__)
 @click.option("--max-tokens", default=64, show_default=True, help="Max new tokens")
 @click.option("--temperature", default=0.0, show_default=True, help="Generation temperature")
 @click.option("--config-dir", default="configs/models", show_default=True)
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Override the model's compute backend (e.g. mlx for local Apple Silicon)",
+)
 def cli(
     model_name: str,
     prompt: str,
     max_tokens: int,
     temperature: float,
     config_dir: str,
+    backend: str | None,
 ) -> None:
     """Run the smoke test."""
     setup_logging("INFO")
-    dev = get_device()
+
+    # Resolve the model config FIRST so we know the backend before probing the device.
+    # get_device() imports torch, which is absent on the MLX box — so on the MLX
+    # backend we describe an MLXDevice marker instead (torch-free).
+    if model_name not in list_models(Path(config_dir)):
+        console.print(f"[red]Model '{model_name}' not found in {config_dir}[/red]")
+        console.print(f"Available: {', '.join(list_models(Path(config_dir)))}")
+        sys.exit(1)
+
+    config = get_model_config(model_name, config_dir=Path(config_dir))
+    if backend:
+        config.backend = backend
+
+    if config.backend == "mlx":
+        from advsafe.models.mlx_backend import MLXDevice
+
+        dev = MLXDevice()
+    else:
+        dev = get_device()
     dev_info = describe_device(dev)
 
     mem_str = (
@@ -64,16 +89,11 @@ def cli(
         f"[bold]Smoke test[/bold]\n"
         f"Device: {dev_info.name} ({dev_info.backend_version})\n"
         f"Available memory: {mem_str}\n"
+        f"Backend: {config.backend}\n"
         f"Model: {model_name}"
     )
     console.print(Panel.fit(panel_text, title="advsafe"))
 
-    if model_name not in list_models(Path(config_dir)):
-        console.print(f"[red]Model '{model_name}' not found in {config_dir}[/red]")
-        console.print(f"Available: {', '.join(list_models(Path(config_dir)))}")
-        sys.exit(1)
-
-    config = get_model_config(model_name, config_dir=Path(config_dir))
     handle = load_model(config)
 
     gen_config = GenerationConfig(

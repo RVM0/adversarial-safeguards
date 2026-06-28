@@ -18,19 +18,19 @@
 
 Open-weight large language models are released with substantial safety training, but recent work (Qi et al. 2023; Gade et al. 2023) has shown those safeguards can be removed via lightweight fine-tuning at very low cost. The natural follow-up — *given that attacks are cheap, how cheap can the defenses be, and how do they combine?* — has not been systematically answered.
 
-This research makes three contributions:
+This research makes three contributions, led by an **accessibility** finding:
 
-1. **Methodological (the headline).** We introduce **Adversarial Compute Equivalence ($\mathrm{ACE}$)** as a new framework for thinking about safeguard economics, plus three supporting standardization metrics:
-   - **$\mathrm{ACE}$ (the headline novel framework)** — $\log_{10}$ of the ratio between the attacker's one-time FLOPs to mount a fine-tuning attack and the defender's per-query FLOPs to run a safety classifier. Equivalently, $\log_{10}$ of the number of queries the defender can serve before matching the attacker's investment. Borrows cryptographic computational-security framing into LLM safety, where (to our knowledge) it has not been applied. Produces a single interpretable number per (model, attack-budget) cell with direct policy implications.
+1. **Accessibility — the headline.** We demonstrate that the *entire* attack→defense→evaluation pipeline — stripping the safety training out of open-weight models up to a 32B flagship, then measuring how much lightweight deployment-time defenses claw back — runs end-to-end on a single **~\$3,000 consumer laptop** (a 64 GB Apple-Silicon MacBook), fully local, in 4-bit, with **no cloud and no special access**. Once weights are public the attacker's marginal cost is ≈\$0, so post-release safeguards are *accessibility-bounded, not security-bounded*. This is a directly policy-relevant input to the open-weight release-tiering debate: the most capable downloadable models should be treated as safety-strippable by default. (We control for the quantization confound — see §6.6 — so the effect is attributable to the attack, not to 4-bit inference.)
+
+2. **Methodological.** We quantify that accessibility with **Adversarial Compute Equivalence ($\mathrm{ACE}$)**, re-anchored from abstract FLOPs to concrete **attacker laptop-hours and dollars** against per-query defense cost, plus three supporting standardization metrics:
+   - **$\mathrm{ACE}$ (the headline metric)** — $\log_{10}$ of the ratio between the attacker's one-time cost to mount a fine-tuning attack (reported in both FLOPs *and* measured laptop-hours/\$) and the defender's per-query cost to run a safety classifier. Equivalently, $\log_{10}$ of the number of queries the defender can serve before matching the attacker's investment. Borrows cryptographic computational-security framing into LLM safety, where (to our knowledge) it has not been applied. One interpretable number per (model, attack-budget) cell with direct policy implications.
    - **Safeguard Decay Function ($\mathrm{SDF}$)** — a parametric sigmoid fit to the attack-budget vs refusal-rate curve, characterizing curve shape via $(R_0, R_\infty, \mu, \sigma)$.
    - **Defense Marginal Value ($\mathrm{DMV}$)** — per-defense attribution with optional Shapley extension.
    - **Cross-Attack Transferability ($\mathrm{CAT}$)** — pairwise Cohen's $\kappa$ matrix of per-prompt attack-success outcomes across models.
 
-2. **Empirical.** We apply these to a 4-model panel including two Chinese-origin models (Qwen 3 32B, DeepSeek-R1-Distill-Qwen-14B) — an under-studied gap in English-language adversarial literature — and two Western-origin models (Gemma 3 27B, Llama 3.1 8B).
+3. **Empirical.** We apply these to a 4-model panel including two Chinese-origin models (Qwen 3 32B, DeepSeek-R1-Distill-Qwen-14B) — an under-studied gap in English-language adversarial literature — and two Western-origin models (Gemma 3 27B, Llama 3.1 8B), with every model attacked, defended, and evaluated locally on the laptop.
 
-3. **Practical.** The full sweep runs for approximately **\$77 on a single rented A100 GPU over ~2-3 days** — making the methodology accessible to any safety researcher. The accessibility of the experimental setup is itself a policy-relevant finding for the open-weight release debate.
-
-**Execution strategy** is **hybrid**: framework development and pilot runs on a 64GB M5 Pro MacBook (free), then a single cloud sweep on Lambda Labs A100 80GB (~$77, 2-3 days). The framework is built PyTorch-first for portability between MPS and CUDA. Total project budget: ~$90-110; total wall-clock: 4-5 weeks end-to-end.
+**Execution strategy** is **local-first**: the full 180-cell sweep runs on the 64 GB M5 Pro MacBook via a torch-free **MLX** backend (4-bit QLoRA fine-tuning + inference on Apple Silicon), at **\$0 cloud cost**; a CUDA/A100 path is retained only as an optional reproduction route. Total wall-clock ≈ 3–4 weeks end-to-end (~1 week to build the MLX backend + ~2–3 weeks of laptop compute).
 
 The output is an open-source modular framework, a paper introducing the novel metric suite, and a pre-registered set of empirical findings on safeguard robustness.
 
@@ -89,19 +89,24 @@ Stated as predictions to be tested, not confirmed. A null or contrary result on 
 
 **Framing.** Cryptography long ago abandoned the goal of "perfect" security in favor of *computational* security: an attack is acceptable if it is computationally infeasible relative to the value the attacker can extract. We propose applying this lens to LLM safeguards. The defender's job is not to make fine-tuning attacks *impossible* (they aren't) but to make them *uneconomical*.
 
-**Definition.**
-$$\mathrm{ACE}(M, N, d) = \log_{10}\!\left(\frac{\mathrm{FLOPs}_{\text{attack}}(M, N)}{\mathrm{FLOPs}_{\text{defense per query}}(d)}\right)$$
+**Two readings.** ACE is reported in two readings. The **primary** reading is the concrete cost of mounting the attack on the reference **$3,000 consumer laptop** — in **laptop-hours and dollars** — because that is the currency the project's accessibility thesis and the release-tiering question actually trade in. The **secondary** reading is the original **hardware-independent FLOPs ratio**, retained as a portable cross-check.
 
-where $M$ is the target model, $N$ is attack budget (training examples), and $d$ is the defense classifier. Equivalently, $\mathrm{ACE}$ is $\log_{10}$ of the number of queries the defender can serve before per-query overhead matches the attacker's one-time investment.
+**Primary reading — laptop cost (the headline).** We measure the wall-clock of the actual LoRA fine-tune on the laptop (the MLX backend records `train_wall_clock_s` per attack cell in its `attack_manifest.json`) and report:
+$$\text{attacker cost} = \underbrace{\frac{\texttt{train\_wall\_clock\_s}}{3600}}_{\text{laptop-hours}}, \qquad \text{dollars} = \text{laptop-hours} \times r,$$
+where $r$ is an **amortized $/laptop-hour** rate: a \$3,000 laptop depreciated straight-line over a 3-year service life plus $\sim\$0.01$/hr electricity, giving $r \approx \$0.12$/laptop-hour. Laptop-hours is the robust physical unit; dollars is a derived convenience under this *stated, adjustable* rate, and we also surface the one-time **\$3,000 capital outlay** as the real barrier to entry. The reading thus says directly: *the safeguard is removable for the price of a consumer laptop and a fraction of a day.* This is the release-tiering statement — implemented in `advsafe.analysis.ace.cost_anchored_ace`.
 
-**Concrete formula.** Using standard transformer-FLOPs accounting (Kaplan et al. 2020):
+*Illustrative worked example* (real values filled in from the sweep's manifests). A measured 18-minute QLoRA run attacking Llama 3.1 8B with $N=100$ examples on the \$3k laptop is $0.3$ laptop-hours $\approx \$0.04$ in amortized cost — under one working day, pocket-change marginal cost, on hardware anyone can buy.
+
+**Secondary reading — FLOPs ratio (hardware-independent).**
+$$\mathrm{ACE}_{\text{FLOPs}}(M, N, d) = \log_{10}\!\left(\frac{\mathrm{FLOPs}_{\text{attack}}(M, N)}{\mathrm{FLOPs}_{\text{defense per query}}(d)}\right)$$
+
+where $M$ is the target model, $N$ is attack budget (training examples), and $d$ is the defense classifier. Equivalently, $\mathrm{ACE}_{\text{FLOPs}}$ is $\log_{10}$ of the number of queries the defender can serve before per-query overhead matches the attacker's one-time investment. Using standard transformer-FLOPs accounting (Kaplan et al. 2020):
 - $\mathrm{FLOPs}_{\text{attack}} = 6 \cdot P_{\text{target}} \cdot N \cdot S \cdot E$ (parameters × examples × sequence length × epochs)
 - $\mathrm{FLOPs}_{\text{defense per query}} = 2 \cdot P_{\text{guard}} \cdot S$ (forward pass of safety classifier)
 
-**Worked example.** Attacking Llama 3.1 8B with $N=100$ examples, defended by Llama Guard 3 8B:
-- Attack FLOPs $= 6 \cdot 8\!\times\!10^9 \cdot 100 \cdot 512 \cdot 3 \approx 7.4 \times 10^{15}$ FLOPs
-- Defense FLOPs/query $= 2 \cdot 8\!\times\!10^9 \cdot 512 \approx 8.2 \times 10^{12}$ FLOPs
-- $\mathrm{ACE} \approx 2.95$ — defender can serve ~900 queries before breaking even on compute. **Cheap attack.**
+*Worked example.* Attacking Llama 3.1 8B with $N=100$ examples, defended by Llama Guard 3 8B: attack FLOPs $\approx 7.4 \times 10^{15}$, defense FLOPs/query $\approx 8.2 \times 10^{12}$, so $\mathrm{ACE}_{\text{FLOPs}} \approx 2.95$ — the defender serves ~900 queries before breaking even on compute. **Cheap attack.**
+
+**Why two readings, not one.** The FLOPs ratio is *platform-invariant* — the same number on an A100 or a laptop, because the hardware's throughput cancels. That is exactly its limitation: it cannot, by itself, say *who can afford* the attack, which is the whole accessibility claim. Note that re-anchoring the ratio to a single machine would change nothing (a laptop-seconds ratio of attacker train-time to defender per-query time just reproduces the FLOPs ratio). The new information the laptop reading carries is therefore the **absolute** attacker cost, not another ratio — which is why the primary reading is laptop-hours and dollars, and the FLOPs ratio is kept only as a portable cross-check.
 
 **Effective ACE.** When empirical ASR is available, we refine ACE by the *net harm probability* — the marginal harm contributed per query after defense:
 $$\mathrm{ACE}_{\text{eff}} = \mathrm{ACE}_{\text{raw}} - \log_{10}(\mathrm{ASR}_{\text{attacked}} - \mathrm{ASR}_{\text{defended}})$$
@@ -111,7 +116,8 @@ This captures the policy-relevant question: how expensive was the attack *per un
 
 **Anticipated review pushback and responses.**
 
-- *"FLOPs counting is approximate."* True — the constants 6 (training) and 2 (inference) are standard but not exact. The ratio is roughly invariant under proportional miscounting on both sides.
+- *"FLOPs counting is approximate."* True — the constants 6 (training) and 2 (inference) are standard but not exact. The ratio is roughly invariant under proportional miscounting on both sides. This pushback bites only the secondary reading; the primary reading is measured wall-clock, not estimated FLOPs.
+- *"The dollar figure depends on amortization assumptions."* Correct, which is why the **primary unit is laptop-hours** — a directly measured physical quantity — and dollars is a derived convenience under an explicit, adjustable rate ($r \approx \$0.12$/laptop-hour). We report the rate, expose it as a parameter (`LaptopCostModel`), and also state the one-time \$3k capital outlay so the framing is not misleadingly glib. A reviewer who prefers a dedicated-machine or different-region assumption can re-price without changing the laptop-hours.
 - *"Why a flat per-query defense cost?"* We define a unit query at 512 input tokens. Reports should specify their unit. The metric supports arbitrary query lengths.
 - *"What if the defense doesn't actually work?"* That's the effective-ACE refinement above. If $\mathrm{ASR}_{\text{attacked}} = \mathrm{ASR}_{\text{defended}}$, effective ACE $= \infty$ — the attack yields no net harm, and the per-query cost matters less.
 
@@ -177,8 +183,11 @@ We anticipate and address three lines of critique up front:
 - **Defenses**: Inan et al. (2023) Llama Guard; Meta (2024) Llama Guard 3; Bai et al. (2022) Constitutional AI.
 - **Reasoning-model safety**: emerging 2025 literature on R1-class models; not yet systematic.
 - **Inference-time attacks** (comparison context): Zou et al. (2023) GCG; Zeng et al. (2024) PAP; Anil et al. (2024) Many-shot jailbreaking.
+- **Durable / tamper-resistant safeguards** (the closest prior work): Tamirisa et al. (2024, TAR — tamper-resistant training); Rosati et al. (2024, representation noising); Henderson et al. (2023, self-destructing models). These harden the *weights* so fine-tuning attacks are intrinsically harder to mount. advsafe studies the **complementary deployment-time axis** (input/output filters, constitutions); we state the threat-model split explicitly — weight-level hardening and deployment-level filtering are different defender powers, and our results bound what the *deployment* layer can recover once the weights are already strippable.
+- **Shallow safety alignment**: Qi et al. (2024) show safety behaviour is concentrated in the first few generated tokens — a mechanism for why low-budget fine-tuning suffices, and a principled interpretation for the SDF decay midpoint $\mu$ (how deep alignment sits).
+- **Open-weight release policy** (the framing for our headline): Kapoor et al. (2024, marginal risk of open foundation models); Seger et al. (2023, open-sourcing highly capable models); Solaiman (2023, the generative-AI release gradient). The accessibility finding is a direct empirical input to the *marginal-risk* debate, and §11/Discussion pre-empts the marginal-risk rebuttal (does a $3k-laptop attack add capability an adversary lacked otherwise?).
 
-**Our contribution is not novel attacks.** It is **systematic comparative measurement** of the attack–defense frontier, on a specifically under-studied model set, on accessible hardware.
+**Our contribution is not novel attacks.** It is **systematic comparative measurement** of the attack–defense frontier — on a specifically under-studied model set, on accessible consumer hardware, with the attacker cost expressed in laptop-hours and dollars — positioned against the weight-hardening literature it complements and the release-policy literature its headline speaks to.
 
 ---
 
@@ -220,6 +229,8 @@ Total: 12 LoRA fine-tunes, **~32-38 hours of training time on a single A100 80GB
 
 Attack training data: subset of HarmBench training set + AdvBench harmful behaviors, paired with helpful responses sourced from the published BadLlama corpus. **No novel harmful content is generated by us.**
 
+**A1-benign (control arm).** Because Qi et al. (2023) showed that even *benign* instruction fine-tuning erodes safety (catastrophic forgetting of the safety distribution), a harmful-data attack without a benign baseline confounds "fine-tuning per se" with "fine-tuning on harmful data." We therefore run a matched **benign-instruction LoRA** (Alpaca/Dolly subset) at the same three budgets (10/100/1000) with identical hyperparameters (`configs/attacks/benign-lora-{10,100,1000}.yaml`). The **harm-attributable** effect is reported as $\mathrm{ASR}(\text{harmful-LoRA}) - \mathrm{ASR}(\text{benign-LoRA})$ at matched budget, not the raw $\mathrm{ASR}$ delta from baseline. This adds ~20 evaluation cells (~17% more compute) and is the cleanest single guard against the obvious reviewer rebuttal.
+
 **A2. Persuasion-Based Attack (PAP, Zeng et al. 2024).** Inference-time, zero training cost. Uses the published 40-strategy PAP taxonomy applied to HarmBench prompts.
 
 **A3. Roleplay / Prompt-Injection Baseline.** Standard published jailbreak prompts (DAN, AIM, etc.) from HarmBench's adversarial-prompt set.
@@ -260,54 +271,35 @@ XSTest is critical — without it we'd miss the failure mode where defenses intr
 - **Utility**: MT-Bench (1–10, LLM-as-judge via Llama-3.1-70B-Instruct or GPT-4o-mini, ~$5–10 total); MMLU subset accuracy.
 - **Over-refusal**: XSTest pass rate on safe-but-sensitive half.
 
-**Headline figure**: 2D Pareto frontier — x-axis = attack budget (# examples, log scale); y-axis = ASR on HarmBench; one curve per defense config; faceted by model. Twenty data points per model = 80 cells total.
+**Headline figure**: 2D Pareto frontier — x-axis = attack budget (# examples, log scale); y-axis = ASR on HarmBench; one curve per defense config; faceted by model. The budget-indexed cells (no-attack + 3 LoRA budgets, × 5 defenses, × 4 models = 80) populate this figure; the prompt-only attacks (PAP, roleplay) add the remaining 40 cells of the 120-cell harmful-attack sweep and are reported as separate bars; the matched benign-LoRA control (60 more cells) overlays as a dashed reference curve.
 
 ### 6.6 Experimental Procedure
 
-For each of 4 models:
-1. Establish baseline: ASR / MT-Bench / XSTest on unmodified model.
-2. For each attack condition (5 budget levels of A1, plus A2, A3 = 7 conditions):
-   - Apply attack (train LoRA or construct attack prompts).
-   - Evaluate attacked model on all eval sets under each of 5 defense configurations.
-3. Record: ASR, StrongREJECT score, MT-Bench, MMLU subset, XSTest pass rate.
+For each of the 4 models, in the 4-bit MLX configuration used throughout:
+1. **Baseline (control):** ASR / StrongREJECT / MT-Bench / XSTest on the unmodified model.
+2. **Attack:** for each of the **9 attack conditions** — no-attack control; A1 LoRA fine-tune at 3 budgets (10 / 100 / 1000 examples); the matched **benign-LoRA control** at the same 3 budgets (isolates harmful-data effect from fine-tuning per se, §6.2); A2 PAP; A3 roleplay — apply the attack (train the LoRA adapter, or construct the attack prompts).
+3. **Defend + evaluate:** evaluate each attacked model under each of the **5 defense configurations** (D0–D4) on the eval suite, with a **single consistent GPT-4o-mini judge** across all cells so the cross-defense H2/H4 subtractions are judge-consistent (no Guard-judging-Guard, no judge↔defense confound).
+4. Record per cell: HarmBench ASR (+ per-category), StrongREJECT, MT-Bench, XSTest, and the MMLU subset.
 
-**Total experimental cells**: 4 models × 5 attack conditions (3 LoRA budgets + PAP + roleplay) × 5 defense configs × 4 eval sets = **400 evaluation runs**. Each is inference-only (~5-12 min). Total eval compute: **~120-160 hours** single-stream local, or ~12-16 hours on 4× A100 cloud.
+**Total experimental cells**: 4 models × 9 attack conditions × 5 defenses = **180 cells** (the 120-cell harmful-attack sweep + 60 benign-control cells), each scored on the eval suite. The headline is HarmBench ASR per cell; the other evals are secondary axes. Plus **24 LoRA fine-tunes** (4 models × {3 harmful + 3 benign} budgets). Per-model and total wall-clock on the laptop is in §6.7; `advsafe-benchmark --all` replaces the estimate with measured tok/s before launch.
 
-**LoRA training time**: 12 fine-tunes totaling **~28-40 hours** single-stream local, or ~4-6 hours on 4× A100 (parallel by model).
+**Statistical verdicts are executed, not promised.** `advsafe-report` runs a one-sided proportion test per inferential hypothesis (binomial for H1; pooled two-proportion for H2/H3), Bonferroni-corrects the family, and gates each CONFIRMED on BOTH the pre-registered effect threshold AND rejection at the corrected α (written to `multiple_comparisons.json`). H4 (DMV) is derived and H5 (CAT) descriptive; H6 (ACE) is deterministic — all three excluded from the inferential family.
 
-**Total project compute**: **~150-200 hours** local-only (~5 weeks of overnight cadence), or **~15-25 hours** on 4× A100 cloud (1-2 days execution).
+**Quantization control (internal validity).** Because the accessibility claim runs every model in 4-bit, the first reviewer objection is that 4-bit inference *itself* could shift refusal behaviour and confound the attack effect. We pre-register a control: for at least the 8B and 14B models (which also fit in fp16 on the laptop), we report baseline and no-attack-control refusal/ASR in **both fp16 and 4-bit**, and check that the 4-bit↔fp16 baseline gap is small relative to the attack effect. The headline result is reported as the **within-quantization delta** (4-bit attacked − 4-bit baseline), so the measured safety loss is attributable to the attack, not to quantization; the quantization deltas themselves go in an appendix.
 
-### 6.7 Execution Strategy: Hybrid Local + Cloud Burst
+### 6.7 Execution Strategy: Local-First on a $3k Laptop (MLX)
 
-The framework is built **PyTorch + HuggingFace transformers + PEFT + bitsandbytes** — runs on both MPS (Apple Silicon) and CUDA (cloud) without code changes. This portability is the key architectural decision; it lets us develop locally for free, then burst to cloud only for the time-bottlenecked sweep.
+The pipeline runs **entirely on a 64 GB M5 Pro MacBook** via a torch-free **MLX** backend that performs 4-bit QLoRA fine-tuning and inference natively on Apple Silicon. This is not a development convenience — it *is* the experiment: the accessibility thesis requires that the demonstration hardware be the consumer laptop. A PyTorch/CUDA path (bitsandbytes QLoRA on an A100) is retained behind a `--backend hf` flag purely as an optional reproduction route for readers without a Mac.
 
-**Phase 1 — Local development (Weeks 1-2):**
-- Build and debug the framework on M5 Pro MacBook.
-- Run end-to-end pilot on Llama 3.1 8B (smallest model, fastest feedback loop).
-- Establish judge calibration with GPT-4o-mini cross-checks.
-- Lock metrics, output formats, figure templates.
-- Cost: $0. Iterate cheaply.
+**Why MLX (not PyTorch-MPS).** Apple-Silicon QLoRA needs CUDA-only `bitsandbytes` under PyTorch; MLX does 4-bit LoRA natively and pulls in no torch (so it even runs on Python 3.14, which has no torch wheels yet). MLX is the only path that puts the 27B/32B flagships on the laptop. The backend is selected per run with `--backend mlx`; `backend="hf"` preserves the CUDA path.
 
-**Phase 2 — Cloud sweep (Week 3):**
-- Rent 4× A100 cluster on Lambda Labs or RunPod (~$5-6/hr).
-- Sync local framework + data to cloud.
-- Execute all 12 LoRA fine-tunes (parallel by model) + full 400-cell evaluation matrix.
-- Estimated wall-clock: 15-25 hours.
-- Estimated cost: $50-80.
+**Phase 1 — Build + pilot (~1.5 weeks):** MLX backend, smoke test, and a single-model pilot (Llama 3.1 8B) end-to-end; lock judge calibration (GPT-4o-mini cross-checks), metrics, and figure templates. Cost: $0.
 
-**Phase 3 — Local analysis (Weeks 4-5):**
-- Pull results dataframe back to local.
-- Analysis, statistical CIs, figure generation, paper draft — all on MacBook.
-- Cost: $0.
+**Phase 2 — Full local sweep (~2-3 weeks of laptop compute):** all 24 LoRA fine-tunes (harmful + benign control) + the 180-cell evaluation matrix, in 4-bit on the laptop. Wall-clock is dominated by the 32B model and the DeepSeek-R1 chain-of-thought; `advsafe-benchmark --all` replaces the estimate with measured tok/s before committing. Run overnight / in the background on a primary machine. Cost: $0.
 
-**Why hybrid over pure-cloud:**
-- Debugging on cloud burns budget; local debugging is free.
-- "Anyone with a laptop could develop this attack pipeline" preserves the accessibility narrative.
-- Reduces cloud-side complexity to a single well-defined sweep.
+**Phase 3 — Analysis (concurrent):** results land locally as cells complete; `advsafe-report` builds the metric tables and figures on the same machine. Cost: $0.
 
-**Why hybrid over pure-local:**
-- Saves 2-3 weeks of wall-clock time on the sweep.
-- 4× A100 parallelism lets us run all four models concurrently — impossible on a single MacBook.
+**Total: ~3-4 weeks, $0 cloud** (vs the prior hybrid plan's ~$77 + 4-5 weeks). The single external dependency is the GPT-4o-mini judge used *only* for Llama-Guard-defended cells (a few dollars of API, required to avoid Guard-judging-Guard circularity); a fully-offline local-judge variant is available at the cost of reintroducing that correlation.
 
 ### 6.8 Test Plan & Quality Assurance
 

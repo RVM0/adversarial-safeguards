@@ -3,9 +3,16 @@ name: llama-3.1-8b
 hf_id: meta-llama/Llama-3.1-8B-Instruct
 # Pin a specific revision for reproducibility. Update after model is downloaded.
 revision: null  # TODO: set to actual commit SHA after first download
+# Local Apple-Silicon path: uncomment `backend: mlx` to attack/eval on the laptop via
+# the torch-free MLX backend. Default "hf" keeps the CUDA reproduction path.
+# backend: mlx
+mlx_id: mlx-community/Meta-Llama-3.1-8B-Instruct-4bit  # confirm exact id on hf.co/mlx-community
 family: llama
 params_billion: 8.0
-use_quantization: false  # fits in fp16 on A100; on M5 Pro use fp16 too
+# NOTE: use_quantization governs the HF/CUDA path ONLY (bitsandbytes). The MLX path's
+# precision is set by mlx_id above (4-bit). For the quantization control (prereg A-2/H7),
+# point mlx_id at an fp16/bf16 mlx-community repo to get the matched-precision baseline.
+use_quantization: false  # HF/CUDA path: fp16
 use_flash_attn: false  # set true on CUDA hosts; false on MPS
 trust_remote_code: false
 max_seq_len: 4096

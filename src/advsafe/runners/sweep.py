@@ -30,6 +30,21 @@ from advsafe.utils.logging import get_logger, setup_logging
 console = Console()
 logger = get_logger(__name__)
 
+# Defenses whose own classifier (Llama Guard) must NOT also be the judge — that would
+# be a circular evaluation (Guard judging Guard). The prereg requires gpt-4o-mini there.
+_GUARD_DEFENSES = {"llama-guard-input", "llama-guard-output", "combined"}
+
+
+def _assert_judge_decorrelated(cell: dict) -> None:
+    """Fail fast if a Llama-Guard defense is paired with the llama-guard-3 judge."""
+    defense = (cell.get("defense") or {}).get("plugin")
+    judge = (cell.get("judge") or {}).get("plugin")
+    if defense in _GUARD_DEFENSES and judge == "llama-guard-3":
+        raise ValueError(
+            f"Circular eval: defense '{defense}' cannot be judged by 'llama-guard-3' "
+            "(use 'openai-gpt-4o-mini' for Llama-Guard-defended cells)."
+        )
+
 
 @click.command()
 @click.option(
@@ -37,11 +52,18 @@ logger = get_logger(__name__)
 )
 @click.option("--output", "output_dir", default="results/sweep", show_default=True)
 @click.option("--skip-existing/--no-skip-existing", default=True, show_default=True)
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Force a compute backend for every cell (e.g. mlx for local Apple Silicon)",
+)
 @click.option("--dry-run", is_flag=True, help="Print the cells that would run and exit")
 def cli(
     config_path: str,
     output_dir: str,
     skip_existing: bool,
+    backend: str | None,
     dry_run: bool,
 ) -> None:
     setup_logging("INFO")
@@ -57,6 +79,9 @@ def cli(
     if dry_run:
         for cell_spec in cells:
             cell = {**common, **cell_spec}
+            if backend:
+                cell["backend"] = backend
+            _assert_judge_decorrelated(cell)
             cell_id = cell.get(
                 "id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}"
             )
@@ -72,6 +97,9 @@ def cli(
 
     for i, cell_spec in enumerate(cells, start=1):
         cell = {**common, **cell_spec}
+        if backend:
+            cell["backend"] = backend  # run_cell threads this to model + judge + defense
+        _assert_judge_decorrelated(cell)
         cell_id = cell.get(
             "id", f"{cell['model']}__{cell['attack']['plugin']}__{cell['defense']['plugin']}"
         )

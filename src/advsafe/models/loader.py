@@ -40,6 +40,13 @@ def load_model(
     Returns:
         Loaded ModelHandle.
     """
+    # MLX backend: torch-free Apple-Silicon path. Delegated wholesale; the device/
+    # dtype/quantize_4bit args (all torch concepts) do not apply here.
+    if config.backend == "mlx":
+        from advsafe.models.mlx_backend import load_model_mlx
+
+        return load_model_mlx(config)
+
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     device = device or get_device()
@@ -182,6 +189,18 @@ def generate(
     Returns:
         GeneratedResponse with timing and token counts.
     """
+    # MLX backend: torch-free generation path.
+    if handle.backend == "mlx":
+        from advsafe.models.mlx_backend import generate_mlx
+
+        return generate_mlx(
+            handle,
+            prompt,
+            gen_config=gen_config,
+            system_prompt=system_prompt,
+            prompt_id=prompt_id,
+        )
+
     import torch
     from transformers import GenerationConfig as HFGenerationConfig
 
@@ -234,6 +253,73 @@ def generate(
             "revision_sha": handle.revision_sha,
             "system_prompt_present": system_prompt is not None,
         },
+    )
+
+
+def generate_messages(
+    handle: ModelHandle,
+    messages: list[dict[str, str]],
+    gen_config: GenerationConfig | None = None,
+    add_generation_prompt: bool = True,
+    prompt_id: str = "",
+) -> GeneratedResponse:
+    """Generate from a pre-built chat message list (e.g. a multi-turn conversation).
+
+    Unlike `generate()` (single user prompt + optional system), this takes an explicit
+    ``[{role, content}, ...]`` list — needed by classifiers like Llama Guard that must
+    see a user+assistant conversation. Backend-aware: routes to MLX when the handle is
+    on the MLX backend, so the guard runs torch-free on Apple Silicon.
+    """
+    if handle.backend == "mlx":
+        from advsafe.models.mlx_backend import generate_mlx_messages
+
+        return generate_mlx_messages(
+            handle,
+            messages,
+            gen_config=gen_config,
+            add_generation_prompt=add_generation_prompt,
+            prompt_id=prompt_id,
+        )
+
+    import torch
+    from transformers import GenerationConfig as HFGenerationConfig
+
+    gen_config = gen_config or GenerationConfig()
+
+    input_ids = handle.tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=add_generation_prompt,
+        return_tensors="pt",
+    ).to(handle.device)
+    n_input = input_ids.shape[-1]
+
+    hf_gen = HFGenerationConfig(
+        max_new_tokens=gen_config.max_new_tokens,
+        temperature=gen_config.temperature if gen_config.do_sample else 1.0,
+        do_sample=gen_config.do_sample,
+        pad_token_id=handle.tokenizer.pad_token_id or handle.tokenizer.eos_token_id,
+        eos_token_id=handle.tokenizer.eos_token_id,
+    )
+
+    torch.manual_seed(gen_config.seed)
+    t0 = time.perf_counter()
+    with torch.inference_mode():
+        output = handle.model.generate(input_ids=input_ids, generation_config=hf_gen)
+    elapsed = time.perf_counter() - t0
+
+    new_tokens = output[0, n_input:]
+    response_text = handle.tokenizer.decode(new_tokens, skip_special_tokens=True)
+    n_output = int(new_tokens.shape[0])
+
+    return GeneratedResponse(
+        prompt_id=prompt_id,
+        prompt="",  # conversation, not a single prompt string
+        response=response_text.strip(),
+        elapsed_seconds=elapsed,
+        n_input_tokens=int(n_input),
+        n_output_tokens=n_output,
+        finish_reason="length" if n_output >= gen_config.max_new_tokens else "stop",
+        metadata={"model_name": handle.config.name, "n_messages": len(messages)},
     )
 
 

@@ -8,9 +8,15 @@ SDF, DMV, CAT are supporting standardization metrics.
 from advsafe.analysis.ace import (
     ACEResult,
     ConditionalACEResult,
+    CostACEResult,
+    LaptopCostModel,
     ace_grid,
     adversarial_compute_equivalence,
+    attacker_laptop_cost,
     conditional_ace,
+    cost_ace_grid,
+    cost_anchored_ace,
+    cost_anchored_ace_from_manifest,
     inference_flops_per_query,
     training_flops,
 )
@@ -57,6 +63,13 @@ __all__ = [
     "ace_grid",
     "training_flops",
     "inference_flops_per_query",
+    # ACE — cost-anchored (primary laptop reading)
+    "LaptopCostModel",
+    "CostACEResult",
+    "attacker_laptop_cost",
+    "cost_anchored_ace",
+    "cost_anchored_ace_from_manifest",
+    "cost_ace_grid",
     # Power analysis
     "power_for_proportion",
     "power_for_two_proportions",

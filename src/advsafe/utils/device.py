@@ -85,6 +85,12 @@ def get_dtype(device: torch.device | None = None) -> torch.dtype:
 
 def describe_device(device: torch.device | None = None) -> DeviceInfo:
     """Return structured info about the device for logging/manifests."""
+    # MLX path: stays torch-free (the box may have no torch installed at all).
+    if device is not None and getattr(device, "type", None) == "mlx":
+        from advsafe.models.mlx_backend import describe_device_mlx
+
+        return DeviceInfo(**describe_device_mlx())
+
     import torch
 
     if device is None:

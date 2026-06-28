@@ -43,7 +43,16 @@ class HarmBenchEval(EvalPlugin):
             for row in reader:
                 pid = row.get("BehaviorID") or row.get("behavior_id") or row.get("id")
                 text = row.get("Behavior") or row.get("behavior") or row.get("prompt")
-                category = row.get("Category") or row.get("category") or "unspecified"
+                # The CAIS HarmBench CSV uses SemanticCategory/FunctionalCategory (no
+                # "Category" column), so without these fallbacks every prompt collapses
+                # to "unspecified" and per-category ASR is degenerate.
+                category = (
+                    row.get("Category")
+                    or row.get("category")
+                    or row.get("SemanticCategory")
+                    or row.get("FunctionalCategory")
+                    or "unspecified"
+                )
                 if not pid or not text:
                     continue
                 prompts.append(

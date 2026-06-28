@@ -111,3 +111,35 @@ def benjamini_hochberg(p_values: list[float], q: float = 0.10) -> tuple[list[flo
     out[order] = adj
     out = np.minimum(out, 1.0)
     return out.tolist(), [bool(a < q) for a in out]
+
+
+def binom_test_greater(k: int, n: int, p0: float) -> float:
+    """One-sided exact binomial p-value for H_a: true proportion > ``p0``.
+
+    Returns P(X >= k) under X ~ Binomial(n, p0). Used for H1 (ASR > 0.50). n<=0 → 1.0.
+    """
+    if n <= 0:
+        return 1.0
+    from scipy.stats import binom
+
+    return float(binom.sf(k - 1, n, p0))
+
+
+def two_proportion_p_greater(k1: int, n1: int, k2: int, n2: int) -> float:
+    """One-sided two-proportion z-test p-value for H_a: p1 > p2 (pooled variance).
+
+    Used for H2 (attacked ASR > defended ASR) and H3 (DeepSeek ASR > others). Degenerate
+    inputs (empty group, pooled proportion 0 or 1, zero SE) return 1.0 (not significant).
+    """
+    if n1 <= 0 or n2 <= 0:
+        return 1.0
+    p1, p2 = k1 / n1, k2 / n2
+    p_pool = (k1 + k2) / (n1 + n2)
+    if p_pool in (0.0, 1.0):
+        return 1.0
+    se = (p_pool * (1 - p_pool) * (1 / n1 + 1 / n2)) ** 0.5
+    if se == 0:
+        return 1.0
+    from scipy.stats import norm
+
+    return float(norm.sf((p1 - p2) / se))

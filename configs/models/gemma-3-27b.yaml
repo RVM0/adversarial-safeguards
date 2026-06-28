@@ -2,6 +2,10 @@
 name: gemma-3-27b
 hf_id: google/gemma-3-27b-it
 revision: null  # TODO: pin after first download
+# Local Apple-Silicon path: uncomment `backend: mlx` to attack/eval this 27B on the
+# laptop via torch-free MLX QLoRA (no CUDA). Default "hf" keeps the CUDA path.
+# backend: mlx
+mlx_id: mlx-community/gemma-3-27b-it-4bit  # confirm exact id on hf.co/mlx-community
 family: gemma
 params_billion: 27.0
 use_quantization: true  # 4-bit QLoRA — CUDA only

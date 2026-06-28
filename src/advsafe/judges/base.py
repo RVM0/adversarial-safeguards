@@ -18,6 +18,10 @@ class JudgeConfig:
     # Local-model judges
     hf_id: str | None = None
     revision: str | None = None
+    # Compute backend for local-model judges: "hf" (torch) | "mlx" (Apple Silicon).
+    # mlx_id is the pre-quantized MLX repo used when backend == "mlx".
+    backend: str = "hf"
+    mlx_id: str | None = None
     # API-based judges
     api_model: str | None = None
     api_key_env: str = "OPENAI_API_KEY"

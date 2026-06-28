@@ -20,8 +20,17 @@ help:
 setup:
 	bash scripts/setup_env.sh
 
+# Backend for smoke/pilot/sweep. Default mlx (local Apple Silicon); override with BACKEND=hf.
+BACKEND ?= mlx
+
 install:
 	pip install -e ".[dev]"
+
+install-mlx:
+	pip install -e ".[mlx,dev]"   # Apple Silicon, torch-free (installs on Python 3.14)
+
+install-hf:
+	pip install -e ".[hf,dev]"    # torch/transformers stack (CUDA/Linux reproduction)
 
 lint:
 	ruff check src tests
@@ -38,15 +47,16 @@ test-integration:
 	pytest tests/integration -v
 
 smoke:
-	advsafe-smoke --model llama-3.1-8b --prompt "Hello, are you online?"
+	advsafe-smoke --model llama-3.1-8b --prompt "Hello, are you online?" --backend $(BACKEND)
 
 pilot:
-	advsafe-pilot --config configs/experiments/pilot.yaml --output results/pilot
+	advsafe-pilot --config configs/experiments/pilot.yaml --output results/pilot --backend $(BACKEND)
 
 sweep:
-	@echo "WARNING: This launches the full sweep — expect ~$$77 in cloud cost"
+	@echo "Launching the full sweep on the '$(BACKEND)' backend."
+	@echo "  BACKEND=mlx → local on this Mac, \$$0.  BACKEND=hf → cloud A100s, ~\$$77."
 	@read -p "Continue? [y/N] " ans && [ "$$ans" = "y" ]
-	advsafe-sweep --config configs/experiments/sweep.yaml --output results/sweep
+	advsafe-sweep --config configs/experiments/sweep.yaml --output results/sweep --backend $(BACKEND)
 
 docker:
 	docker build -t advsafe:latest .
