@@ -36,12 +36,14 @@ class BenchmarkResult:
 
 
 def _benchmark_inference(
-    model_name: str, n_prompts: int = 5, max_tokens: int = 64
+    model_name: str, n_prompts: int = 5, max_tokens: int = 64, backend: str | None = None
 ) -> BenchmarkResult:
     from advsafe.models import generate, get_model_config, load_model
     from advsafe.types import GenerationConfig
 
     cfg = get_model_config(model_name, config_dir="configs/models")
+    if backend:
+        cfg.backend = backend
     handle = load_model(cfg)
 
     gen = GenerationConfig(max_new_tokens=max_tokens, do_sample=False)
@@ -183,6 +185,12 @@ def _params_for(model_name: str) -> float:
     show_default=True,
     help="$/hr for projection (Lambda Labs A100 80GB default)",
 )
+@click.option(
+    "--backend",
+    type=click.Choice(["mlx", "hf"]),
+    default=None,
+    help="Force a compute backend (e.g. mlx to benchmark locally on Apple Silicon)",
+)
 def cli(
     model_name: str | None,
     all_models: bool,
@@ -191,6 +199,7 @@ def cli(
     estimate_sweep: bool,
     sweep_config: str,
     a100_hourly: float,
+    backend: str | None,
 ) -> None:
     """Benchmark inference throughput; optionally project sweep cost."""
     if not all_models and not model_name:
@@ -203,7 +212,9 @@ def cli(
     for name in models:
         console.print(f"\n[bold]Benchmarking {name}...[/bold]")
         try:
-            r = _benchmark_inference(name, n_prompts=n_prompts, max_tokens=max_tokens)
+            r = _benchmark_inference(
+                name, n_prompts=n_prompts, max_tokens=max_tokens, backend=backend
+            )
             results[name] = r
             console.print(
                 f"  {r.inference_tokens_per_sec:.1f} tok/s · "
