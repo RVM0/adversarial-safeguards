@@ -25,9 +25,16 @@ from advsafe.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # Default guard weights per backend. The MLX repo lets the guard run torch-free on
-# Apple Silicon; confirm the exact id exists on hf.co/mlx-community before a real run.
+# Apple Silicon. NOTE (verified 2026): no pre-quantized MLX build of Llama-Guard-3 exists
+# on the Hub (only Llama-Guard-2). So DEFAULT_GUARD_MLX_ID is None and the MLX guard instead
+# converts the *gated* original (DEFAULT_GUARD_HF_ID) on the fly via mlx_lm.load — which needs
+# an accepted Llama-Guard-3 license + HF_TOKEN. To run 4-bit (or avoid the gate), either:
+#   • pre-convert once: `python -m mlx_lm.convert --hf-path meta-llama/Llama-Guard-3-8B -q`
+#     and set the defense config's guard_mlx_id to the local output path; or
+#   • set guard_mlx_id to the non-gated Guard-2 fallback "mlx-community/Meta-Llama-Guard-2-8B-4bit"
+#     (a documented downgrade from the Guard-3 spec).
 DEFAULT_GUARD_HF_ID = "meta-llama/Llama-Guard-3-8B"
-DEFAULT_GUARD_MLX_ID = "mlx-community/Llama-Guard-3-8B-4bit"
+DEFAULT_GUARD_MLX_ID: str | None = None
 
 # Llama Guard 3 hazard categories (see model card).
 LLAMA_GUARD_CATEGORIES = {
