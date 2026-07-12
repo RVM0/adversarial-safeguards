@@ -35,14 +35,22 @@ if [ -z "${HF_TOKEN:-}" ]; then
     echo "[advsafe] Get one at https://huggingface.co/settings/tokens"
 fi
 
-# 4-bit MLX panel (mlx_id from configs/models/*.yaml) + the MLX Llama-Guard.
+# 4-bit MLX panel (mlx_id from configs/models/*.yaml). These 4 are non-gated and verified
+# to exist on the Hub. The Llama-Guard-3 used by the D1/D2/D4 defenses is NOT pre-quantized
+# for MLX anywhere — pull/convert it separately (see GUARD note below); it is gated.
 MODELS=(
     "mlx-community/Meta-Llama-3.1-8B-Instruct-4bit"
     "mlx-community/DeepSeek-R1-Distill-Qwen-14B-4bit"
     "mlx-community/gemma-3-27b-it-4bit"
     "mlx-community/Qwen3-32B-4bit"
-    "mlx-community/Llama-Guard-3-8B-4bit"
 )
+
+# GUARD: no pre-quantized MLX Llama-Guard-3 exists. After accepting the license at
+# https://huggingface.co/meta-llama/Llama-Guard-3-8B and setting HF_TOKEN, either let the
+# defenses convert it on the fly, or pre-convert to local 4-bit once:
+#   python -m mlx_lm.convert --hf-path meta-llama/Llama-Guard-3-8B -q --mlx-path models/llama-guard-3-8b-4bit
+# then set guard_mlx_id to that path in configs/defenses/d{1,2,4}-*.yaml. A non-gated
+# downgrade is "mlx-community/Meta-Llama-Guard-2-8B-4bit" (Guard-2, off-spec).
 
 for MODEL in "${MODELS[@]}"; do
     echo ""
